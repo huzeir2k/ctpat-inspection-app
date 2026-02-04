@@ -1,0 +1,16 @@
+{
+  "name": "project-name",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "jest"
+  },
+  "dependencies": {
+    "react-native": "latest",
+    "expo": "latest"
+  },
+  "devDependencies": {
+    "jest": "^27.0.0",
+    "jest-expo": "^27.0.0",
+    "@testing-library/react-native": "^8.0.0"
+  }
+}

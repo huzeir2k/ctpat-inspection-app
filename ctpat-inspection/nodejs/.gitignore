@@ -1,0 +1,7 @@
+# Node.js embedded backend
+node_modules/
+*.db
+*.db-shm
+*.db-wal
+.env
+npm-debug.log
