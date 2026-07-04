@@ -426,7 +426,7 @@ router.post(
       const result = await sendInspectionReport(
         recipientEmail,
         inspection.toObject(),
-        Buffer.from(pdfBuffer, 'utf8'), // Convert string buffer to actual buffer
+        pdfBuffer,
         null, // No pdfUrl since we're attaching the PDF
         smtpConfig
       );

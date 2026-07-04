@@ -5,6 +5,7 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
+    "jsx": "react-native",
     "moduleResolution": "bundler",
     "paths": {
       "@/*": [

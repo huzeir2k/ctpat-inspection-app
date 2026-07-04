@@ -2,8 +2,8 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
     Alert,
-    CheckBox,
     Image,
+    Pressable,
     ScrollView,
     StyleSheet,
     Text,
@@ -67,7 +67,7 @@ export default function InspectionView() {
     return () => clearInterval(autoSaveInterval);
   }, [inspectionPoints, formData]);
 
-  const toggleChecklistItem = (id: number) => {
+  const toggleChecklistItem = (id: string) => {
     setInspectionPoints(
       inspectionPoints.map((point) =>
         point.id === id ? { ...point, checked: !point.checked } : point
@@ -469,7 +469,6 @@ export default function InspectionView() {
                 {!verifiedBySignature && (
                   <SignatureCapture
                     onSignatureSaved={(sig) => setVerifiedBySignature(sig)}
-                    currentSignatureId={verifiedBySignature?.id}
                   />
                 )}
               </View>
@@ -480,22 +479,35 @@ export default function InspectionView() {
               <Text style={styles.formSectionTitle}>Compliance Checks</Text>
 
               <View style={styles.checkboxFormItem}>
-                <CheckBox
-                  value={formData.securityCheckboxChecked}
-                  onValueChange={() =>
-                    handleCheckboxChange("securityCheckboxChecked")
-                  }
-                />
+                <Pressable
+                  onPress={() => handleCheckboxChange("securityCheckboxChecked")}
+                  style={[
+                    styles.checkbox,
+                    formData.securityCheckboxChecked && styles.checkboxChecked,
+                  ]}
+                >
+                  {formData.securityCheckboxChecked && (
+                    <Text style={styles.checkmarkText}>✓</Text>
+                  )}
+                </Pressable>
                 <Text style={styles.checkboxLabel}>Security Check</Text>
               </View>
 
               <View style={styles.checkboxFormItem}>
-                <CheckBox
-                  value={formData.agriculturalPestCheckboxChecked}
-                  onValueChange={() =>
+                <Pressable
+                  onPress={() =>
                     handleCheckboxChange("agriculturalPestCheckboxChecked")
                   }
-                />
+                  style={[
+                    styles.checkbox,
+                    formData.agriculturalPestCheckboxChecked &&
+                      styles.checkboxChecked,
+                  ]}
+                >
+                  {formData.agriculturalPestCheckboxChecked && (
+                    <Text style={styles.checkmarkText}>✓</Text>
+                  )}
+                </Pressable>
                 <Text style={styles.checkboxLabel}>
                   Agricultural/Pest Check
                 </Text>
@@ -576,7 +588,6 @@ export default function InspectionView() {
                 {!inspectorSignature && (
                   <SignatureCapture
                     onSignatureSaved={(sig) => setInspectorSignature(sig)}
-                    currentSignatureId={inspectorSignature?.id}
                   />
                 )}
               </View>
