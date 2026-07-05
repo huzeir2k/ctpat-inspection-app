@@ -8,9 +8,7 @@ const connectDB = async () => {
   try {
     const conn = await Promise.race([
       mongoose.connect(process.env.MONGODB_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-        serverSelectionTimeoutMS: 5000, // 5 second timeout
+        serverSelectionTimeoutMS: 5000,
         connectTimeoutMS: 5000,
       }),
       new Promise((_, reject) =>
