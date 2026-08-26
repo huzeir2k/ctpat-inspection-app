@@ -63,7 +63,7 @@ class PdfService {
 
       // Call backend to generate PDF
       console.log('📤 Requesting PDF generation from backend...');
-      const response = await fetch('http://localhost:3000/api/inspections/generate-pdf', {
+      const response = await fetch(`${ApiService.getBaseUrl()}/api/inspections/generate-pdf`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
