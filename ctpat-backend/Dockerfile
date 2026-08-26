@@ -1,5 +1,5 @@
-# Use official Node.js runtime as base image
-FROM node:18-alpine
+# Use official Node.js runtime as base image (matches package.json engines >=20)
+FROM node:20-alpine
 
 # Set working directory
 WORKDIR /app
