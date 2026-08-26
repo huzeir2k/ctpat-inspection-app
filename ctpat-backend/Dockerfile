@@ -1,5 +1,5 @@
-# Use official Node.js runtime as base image (matches package.json engines >=20)
-FROM node:20-alpine
+# Use official Node.js runtime as base image (22+ has native WebSocket support, required by @supabase/supabase-js's realtime client)
+FROM node:22-alpine
 
 # Set working directory
 WORKDIR /app
