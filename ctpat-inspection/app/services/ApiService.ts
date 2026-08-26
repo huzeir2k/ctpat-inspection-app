@@ -21,10 +21,12 @@ export interface ApiSuccessResponse<T = any> {
 
 export type ApiResponse<T = any> = ApiSuccessResponse<T> | ApiErrorResponse;
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+// Build-time default; can be overridden at runtime via setBaseUrl() (e.g. a user-configurable setting)
+const DEFAULT_API_URL = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000').replace(/\/+$/, '');
 
 class ApiService {
   private token: string | null = null;
+  private baseUrl: string = DEFAULT_API_URL;
   private requestCount = 0;
   private requestLog: Array<{
     timestamp: string;
@@ -65,6 +67,28 @@ class ApiService {
   }
 
   /**
+   * Override the backend base URL at runtime (e.g. from the Settings screen)
+   */
+  setBaseUrl(url: string): void {
+    this.baseUrl = url.trim().replace(/\/+$/, '');
+    console.log('✓ API base URL set to:', this.baseUrl);
+  }
+
+  /**
+   * Get the currently active backend base URL
+   */
+  getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
+  /**
+   * Get the build-time default backend URL (used for "reset to default")
+   */
+  getDefaultBaseUrl(): string {
+    return DEFAULT_API_URL;
+  }
+
+  /**
    * Make authenticated API request
    */
   private async request<T = any>(
@@ -86,7 +110,7 @@ class ApiService {
       };
     }
 
-    const url = `${API_BASE_URL}${endpoint}`;
+    const url = `${this.baseUrl}${endpoint}`;
     const startTime = Date.now();
 
     try {
@@ -278,7 +302,7 @@ class ApiService {
    */
   async healthCheck(): Promise<boolean> {
     try {
-      const response = await fetch(`${API_BASE_URL}/health`, {
+      const response = await fetch(`${this.baseUrl}/health`, {
         method: 'GET',
         timeout: 5000,
       } as any);

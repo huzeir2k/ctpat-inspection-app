@@ -2,7 +2,6 @@ import { useFocusEffect, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
     Alert,
-    AsyncStorage,
     ScrollView,
     StyleSheet,
     Switch,
@@ -11,6 +10,7 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import ApiService from "../services/ApiService";
 import AuthService from "../services/AuthService";
 
@@ -31,7 +31,7 @@ const DEFAULT_SETTINGS: SettingsData = {
   ctpatReceiverEmail: "",
   companyName: "",
   inspectorName: "",
-  backendUrl: "http://localhost:3000",
+  backendUrl: "",
 };
 
 const SETTINGS_STORAGE_KEY = "ctpat_app_settings";
@@ -80,8 +80,8 @@ export default function SettingsView() {
 
   const checkBackendStatus = async () => {
     try {
-      const response = await ApiService.healthCheck();
-      setBackendStatus(response.success ? 'healthy' : 'offline');
+      const isHealthy = await ApiService.healthCheck();
+      setBackendStatus(isHealthy ? 'healthy' : 'offline');
     } catch (error) {
       setBackendStatus('offline');
     }
@@ -103,6 +103,43 @@ export default function SettingsView() {
 
   const handleSettingChange = (key: keyof SettingsData, value: any) => {
     setSettings({ ...settings, [key]: value });
+  };
+
+  const handleSaveBackendUrl = async () => {
+    const url = settings.backendUrl?.trim();
+    if (!url) {
+      Alert.alert("Error", "Please enter a backend URL");
+      return;
+    }
+    if (!/^https?:\/\//i.test(url)) {
+      Alert.alert("Error", "URL must start with http:// or https://");
+      return;
+    }
+
+    try {
+      ApiService.setBaseUrl(url);
+      const updated = { ...settings, backendUrl: url };
+      setSettings(updated);
+      await AsyncStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updated));
+      await checkBackendStatus();
+      Alert.alert("Success", "Backend URL updated");
+    } catch (error) {
+      Alert.alert("Error", "Failed to save backend URL");
+    }
+  };
+
+  const handleResetBackendUrl = async () => {
+    try {
+      const defaultUrl = ApiService.getDefaultBaseUrl();
+      ApiService.setBaseUrl(defaultUrl);
+      const updated = { ...settings, backendUrl: "" };
+      setSettings(updated);
+      await AsyncStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updated));
+      await checkBackendStatus();
+      Alert.alert("Success", `Backend URL reset to default (${defaultUrl})`);
+    } catch (error) {
+      Alert.alert("Error", "Failed to reset backend URL");
+    }
   };
 
   const validateEmail = (email: string): boolean => {
@@ -226,6 +263,33 @@ export default function SettingsView() {
           >
             <Text style={styles.testButtonText}>Check Connection</Text>
           </TouchableOpacity>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Backend URL</Text>
+            <TextInput
+              style={styles.input}
+              placeholder={ApiService.getBaseUrl()}
+              value={settings.backendUrl}
+              onChangeText={(text) => handleSettingChange("backendUrl", text)}
+              keyboardType="url"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+          <View style={styles.formButtonContainer}>
+            <TouchableOpacity
+              style={styles.saveButton}
+              onPress={handleSaveBackendUrl}
+            >
+              <Text style={styles.saveButtonText}>Save Backend URL</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={handleResetBackendUrl}
+            >
+              <Text style={styles.cancelButtonText}>Reset to Default</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* General Settings Section */}
