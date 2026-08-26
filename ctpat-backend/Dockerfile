@@ -1,5 +1,5 @@
-# Use official Node.js runtime as base image (22+ has native WebSocket support, required by @supabase/supabase-js's realtime client)
-FROM node:22-alpine
+# Use a glibc-based image (not Alpine/musl) - musl's DNS resolver has known SRV-record lookup issues that break mongodb+srv:// URIs
+FROM node:22-slim
 
 # Set working directory
 WORKDIR /app
