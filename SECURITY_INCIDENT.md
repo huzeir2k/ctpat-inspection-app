@@ -70,5 +70,23 @@ git reset --hard origin/main
 - See [ctpat-backend/FLY_IO_DEPLOYMENT.md](ctpat-backend/FLY_IO_DEPLOYMENT.md#step-4-set-environment-variables) for production deployment
 
 ---
-**Last Updated**: February 4, 2026
-**Status**: ACTIVE - Requires git history rewrite and credential rotation
+
+## Update: Risk Acceptance Decision (2026-09-14)
+
+**Decision**: Git history will NOT be rewritten (no `git filter-repo`/BFG run). The exposed
+MongoDB credential from commit `f10c36a2` is confirmed rotated and revoked at the provider,
+so the historical value is inert and poses no further risk to production systems.
+
+**Decided by**: Huzeir Kurpejovic
+**Rationale**:
+- Credential rotation (completed prior to 2026-09-13) already eliminates the exploitable risk.
+- Rewriting history would force-push over all branches/tags, invalidate every existing clone
+  and fork, and break any open PRs/commit-hash references, for a secret with no remaining value.
+- A prepared scrub script (`scrub-secrets.sh`) remains available in the repo if a future
+  compliance/audit requirement mandates physical removal from history.
+
+**Status**: CLOSED - risk accepted, no further action planned on git history.
+
+---
+**Last Updated**: September 14, 2026
+**Status**: RESOLVED - Credential rotated; history rewrite risk-accepted (see above)
