@@ -18,7 +18,7 @@ router.post(
   '/generate',
   asyncHandler(async (req, res) => {
     try {
-      const { inspectionData, inspectionPoints } = req.body;
+      const { inspectionData, inspectionPoints, photos } = req.body;
 
       if (!inspectionData) {
         throw new APIError('inspectionData is required', 400);
@@ -32,7 +32,8 @@ router.post(
       // Generate filled PDF
       const pdfBuffer = await PdfFillerService.generateFilledPdf(
         inspectionData,
-        inspectionPoints
+        inspectionPoints,
+        photos
       );
 
       // Send PDF as binary

@@ -281,12 +281,14 @@ class ApiService {
     inspectionId: string,
     recipientEmail: string,
     inspectionData?: any,
-    inspectionPoints?: any
+    inspectionPoints?: any,
+    photos?: any
   ): Promise<ApiResponse<any>> {
     return this.request('POST', `/api/inspections/${inspectionId}/send-email`, {
       recipientEmail,
       inspectionData,
       inspectionPoints,
+      photos,
     });
   }
 

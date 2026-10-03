@@ -46,7 +46,14 @@
         }
       ],
       "expo-mail-composer",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow CTPAT Inspection to access your camera to take inspection photos.",
+          "photosPermission": "Allow CTPAT Inspection to access your photos to attach signature images."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

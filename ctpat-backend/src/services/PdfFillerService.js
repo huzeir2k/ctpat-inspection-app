@@ -16,7 +16,7 @@ class PdfFillerService {
    * @param {array} inspectionPoints - 18-point checklist items
    * @returns {Buffer} - PDF file buffer
    */
-  async generateFilledPdf(inspectionData, inspectionPoints) {
+  async generateFilledPdf(inspectionData, inspectionPoints, photos) {
     try {
       // Load the original PDF form
       const pdfPath = path.join(__dirname, '../../assets/ctpatform.pdf');
@@ -84,6 +84,12 @@ class PdfFillerService {
         // "Seal Number:" field
         sealNumberX: 149 * scaleX,
         sealNumberY: pdfHeight - (716 * scaleY),
+
+        // "Freight Bill Number" - placed on the Seal Number row, to the
+        // right of it (there's no dedicated printed field on the original
+        // form for this). Verify placement visually and adjust X/Y as needed.
+        freightBillNumberX: 420 * scaleX,
+        freightBillNumberY: pdfHeight - (716 * scaleY),
         
         // "Seal Application Verified by: Print Name"
         sealVerifiedNameX: 301 * scaleX,
@@ -157,6 +163,17 @@ class PdfFillerService {
         firstPage.drawText(inspectionData.sealNumber, {
           x: coords.sealNumberX,
           y: coords.sealNumberY - textBaselineOffset,
+          size: fontSize,
+          color: textColor,
+        });
+      }
+
+      // Freight Bill Number (drawn beside the Seal Number row; the original
+      // form has no dedicated printed field for this)
+      if (inspectionData.freightBillNumber) {
+        firstPage.drawText(`FB#: ${inspectionData.freightBillNumber}`, {
+          x: coords.freightBillNumberX,
+          y: coords.freightBillNumberY - textBaselineOffset,
           size: fontSize,
           color: textColor,
         });
@@ -266,13 +283,118 @@ class PdfFillerService {
         }
       }
 
-      // Save the filled PDF
-      const filledPdfBytes = await pdfDoc.save();
+      // Append one page per captured photo: image on top, caption below.
+      // Captions are drawn as separate text on the page (NOT burned into
+      // the photo pixels) per the requested design.
+      if (Array.isArray(photos) && photos.length > 0) {
+        await this.addPhotoPages(pdfDoc, photos, pdfWidth, pdfHeight);
+      }
+
+      // Save the filled PDF. useObjectStreams: false avoids compressed
+      // cross-reference streams, which some strict PDF readers (e.g. Foxit)
+      // are pickier about than lenient browser-based viewers.
+      const filledPdfBytes = await pdfDoc.save({ useObjectStreams: false });
       return Buffer.from(filledPdfBytes);
     } catch (error) {
       console.error('Error generating PDF:', error);
       throw error;
     }
+  }
+
+  /**
+   * Appends one page per photo to the PDF document: the photo image is
+   * drawn near the top of the page, and a caption (timestamp, freight bill
+   * number, seal number, load origin/destination, truck/trailer) is drawn
+   * as text below it. Captions are never drawn on top of / into the image.
+   * @param {PDFDocument} pdfDoc
+   * @param {array} photos - array of { base64Data, takenAt, sealNumber, freightBillNumber, loadOrigin, loadDestination, truckNumber, trailerNumber }
+   * @param {number} pageWidth
+   * @param {number} pageHeight
+   */
+  async addPhotoPages(pdfDoc, photos, pageWidth, pageHeight) {
+    const margin = 36;
+    const captionFontSize = 11;
+    const captionLineHeight = 16;
+    const maxImageWidth = pageWidth - margin * 2;
+
+    for (const photo of photos) {
+      if (!photo || !photo.base64Data) continue;
+
+      try {
+        const imageBytes = Buffer.from(photo.base64Data, 'base64');
+
+        // Photos captured via the device camera are JPEGs; fall back to
+        // PNG in case a different source/format is ever used.
+        let embeddedImage;
+        try {
+          embeddedImage = await pdfDoc.embedJpg(imageBytes);
+        } catch (jpgError) {
+          embeddedImage = await pdfDoc.embedPng(imageBytes);
+        }
+
+        const captionLines = this.buildPhotoCaptionLines(photo);
+        const captionBlockHeight = captionLines.length * captionLineHeight;
+
+        const page = pdfDoc.addPage([pageWidth, pageHeight]);
+
+        // Scale the image to fit within the available width/height while
+        // preserving aspect ratio, reserving space at the bottom for the caption.
+        const maxImageHeight = pageHeight - margin * 2 - captionBlockHeight - 20;
+        const scale = Math.min(
+          maxImageWidth / embeddedImage.width,
+          maxImageHeight / embeddedImage.height,
+          1 // never upscale beyond original resolution
+        );
+        const drawWidth = embeddedImage.width * scale;
+        const drawHeight = embeddedImage.height * scale;
+        const imageX = (pageWidth - drawWidth) / 2;
+        const imageY = pageHeight - margin - drawHeight;
+
+        page.drawImage(embeddedImage, {
+          x: imageX,
+          y: imageY,
+          width: drawWidth,
+          height: drawHeight,
+        });
+
+        // Draw caption below the image
+        let captionY = imageY - 24;
+        captionLines.forEach((line) => {
+          page.drawText(line, {
+            x: margin,
+            y: captionY,
+            size: captionFontSize,
+            color: rgb(0, 0, 0),
+          });
+          captionY -= captionLineHeight;
+        });
+
+        console.log('✓ Added photo page to PDF');
+      } catch (error) {
+        console.warn('Failed to embed photo page:', error.message);
+      }
+    }
+  }
+
+  /**
+   * Builds the caption text lines for a photo page: timestamp, freight bill
+   * number, seal number, load origin/destination, and truck/trailer numbers.
+   */
+  buildPhotoCaptionLines(photo) {
+    const lines = [];
+    const takenAt = photo.takenAt ? new Date(photo.takenAt) : null;
+    lines.push(`Date/Time: ${takenAt ? takenAt.toLocaleString() : 'Unknown'}`);
+
+    if (photo.freightBillNumber) lines.push(`Freight Bill Number: ${photo.freightBillNumber}`);
+    if (photo.sealNumber) lines.push(`Seal Number: ${photo.sealNumber}`);
+    if (photo.loadOrigin || photo.loadDestination) {
+      lines.push(`Load Origin / Destination: ${photo.loadOrigin || '—'} / ${photo.loadDestination || '—'}`);
+    }
+    if (photo.truckNumber || photo.trailerNumber) {
+      lines.push(`Truck/Trailer: ${photo.truckNumber || '—'} / ${photo.trailerNumber || '—'}`);
+    }
+
+    return lines;
   }
 }
 

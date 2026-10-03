@@ -12,6 +12,7 @@ import {
     View,
 } from "react-native";
 import SignatureCapture from "../components/SignatureCapture";
+import PhotoCapture from "../components/PhotoCapture";
 import {
     DEFAULT_FORM_DATA,
     DEFAULT_INSPECTION_POINTS,
@@ -21,6 +22,7 @@ import {
 import ApiService from "../services/ApiService";
 import EmailService from "../services/EmailService";
 import PdfService from "../services/PdfService";
+import PhotoService, { StoredPhoto } from "../services/PhotoService";
 import { StoredSignature } from "../services/SignatureService";
 import StorageService from "../services/StorageService";
 
@@ -30,13 +32,14 @@ export default function InspectionView() {
     DEFAULT_INSPECTION_POINTS
   );
   const [formData, setFormData] = useState<InspectionForm>(DEFAULT_FORM_DATA);
-  const [activeTab, setActiveTab] = useState<"checklist" | "signoff">(
+  const [activeTab, setActiveTab] = useState<"checklist" | "signoff" | "photos">(
     "checklist"
   );
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [verifiedBySignature, setVerifiedBySignature] = useState<StoredSignature | null>(null);
   const [inspectorSignature, setInspectorSignature] = useState<StoredSignature | null>(null);
+  const [photos, setPhotos] = useState<StoredPhoto[]>([]);
 
   // Load saved inspection on mount
   useEffect(() => {
@@ -48,6 +51,8 @@ export default function InspectionView() {
           setFormData(saved.formData);
           console.log('Loaded saved inspection');
         }
+        const savedPhotos = await PhotoService.getAllPhotos();
+        setPhotos(savedPhotos);
       } catch (error) {
         console.error('Error loading saved inspection:', error);
       }
@@ -92,6 +97,7 @@ export default function InspectionView() {
       "truckNumber",
       "trailerNumber",
       "sealNumber",
+      "freightBillNumber",
       "verifiedByName",
       "date",
       "time",
@@ -116,6 +122,7 @@ export default function InspectionView() {
         formData,
         inspectorSignature,
         verifiedBySignature,
+        photos,
       });
 
       console.log('📄 PDF generated:', pdfPath);
@@ -125,6 +132,9 @@ export default function InspectionView() {
         truckNumber: formData.truckNumber,
         trailerNumber: formData.trailerNumber,
         sealNumber: formData.sealNumber,
+        freightBillNumber: formData.freightBillNumber,
+        loadOrigin: formData.loadOrigin || '',
+        loadDestination: formData.loadDestination || '',
         inspectionPoints,
         verifiedByName: formData.verifiedByName,
         verifiedBySignatureId: verifiedBySignature?.id,
@@ -159,6 +169,9 @@ export default function InspectionView() {
             truckNumber: formData.truckNumber,
             trailerNumber: formData.trailerNumber,
             sealNumber: formData.sealNumber,
+            freightBillNumber: formData.freightBillNumber,
+            loadOrigin: formData.loadOrigin || '',
+            loadDestination: formData.loadDestination || '',
             date: formData.date,
             time: formData.time,
             printName: formData.printName,
@@ -167,7 +180,17 @@ export default function InspectionView() {
             agriculturalPestCheckboxChecked: formData.agriculturalPestCheckboxChecked,
             notes: formData.notes || '',
           },
-          inspectionPoints
+          inspectionPoints,
+          photos.map(photo => ({
+            base64Data: photo.base64Data,
+            takenAt: photo.takenAt,
+            sealNumber: photo.sealNumber,
+            freightBillNumber: photo.freightBillNumber,
+            loadOrigin: photo.loadOrigin,
+            loadDestination: photo.loadDestination,
+            truckNumber: photo.truckNumber,
+            trailerNumber: photo.trailerNumber,
+          }))
         );
         if (emailResponse.success) {
           console.log('✓ Email sent via backend with PDF');
@@ -211,6 +234,7 @@ export default function InspectionView() {
                   formData,
                   inspectorSignature,
                   verifiedBySignature,
+                  photos,
                 });
                 Alert.alert("Success", "PDF downloaded successfully!");
               } catch (error) {
@@ -224,6 +248,10 @@ export default function InspectionView() {
               setInspectionPoints(DEFAULT_INSPECTION_POINTS);
               setFormData(DEFAULT_FORM_DATA);
               setActiveTab("checklist");
+              PhotoService.clearAllPhotos().catch((error) =>
+                console.error('Error clearing photos:', error)
+              );
+              setPhotos([]);
             },
           },
         ]
@@ -245,6 +273,7 @@ export default function InspectionView() {
       "truckNumber",
       "trailerNumber",
       "sealNumber",
+      "freightBillNumber",
       "verifiedByName",
       "date",
       "time",
@@ -267,6 +296,7 @@ export default function InspectionView() {
         formData,
         inspectorSignature,
         verifiedBySignature,
+        photos,
       });
     } catch (error) {
       Alert.alert("Error", "Failed to generate PDF. Please try again.");
@@ -282,6 +312,7 @@ export default function InspectionView() {
       "truckNumber",
       "trailerNumber",
       "sealNumber",
+      "freightBillNumber",
       "verifiedByName",
       "date",
       "time",
@@ -304,6 +335,7 @@ export default function InspectionView() {
         formData,
         inspectorSignature,
         verifiedBySignature,
+        photos,
       });
     } catch (error) {
       Alert.alert("Error", "Failed to generate PDF. Please try again.");
@@ -354,6 +386,19 @@ export default function InspectionView() {
             Sign Off
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === "photos" && styles.activeTab]}
+          onPress={() => setActiveTab("photos")}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === "photos" && styles.activeTabText,
+            ]}
+          >
+            Photos ({photos.length})
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content}>
@@ -387,6 +432,25 @@ export default function InspectionView() {
                 </View>
               </TouchableOpacity>
             ))}
+          </View>
+        )}
+
+        {/* Photos Tab */}
+        {activeTab === "photos" && (
+          <View>
+            <Text style={styles.sectionTitle}>Inspection Photos</Text>
+            <PhotoCapture
+              photos={photos}
+              onPhotosChanged={setPhotos}
+              metadata={{
+                sealNumber: formData.sealNumber,
+                freightBillNumber: formData.freightBillNumber,
+                loadOrigin: formData.loadOrigin,
+                loadDestination: formData.loadDestination,
+                truckNumber: formData.truckNumber,
+                trailerNumber: formData.trailerNumber,
+              }}
+            />
           </View>
         )}
 
@@ -430,6 +494,45 @@ export default function InspectionView() {
                   placeholder="Enter seal number"
                   value={formData.sealNumber}
                   onChangeText={(text) => handleFormChange("sealNumber", text)}
+                />
+              </View>
+            </View>
+
+            {/* Shipment Information */}
+            <View style={styles.formSection}>
+              <Text style={styles.formSectionTitle}>Shipment Information</Text>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Freight Bill Number *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter freight bill number"
+                  value={formData.freightBillNumber}
+                  onChangeText={(text) =>
+                    handleFormChange("freightBillNumber", text)
+                  }
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Load Origin</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter load origin (optional)"
+                  value={formData.loadOrigin}
+                  onChangeText={(text) => handleFormChange("loadOrigin", text)}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Load Destination</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter load destination (optional)"
+                  value={formData.loadDestination}
+                  onChangeText={(text) =>
+                    handleFormChange("loadDestination", text)
+                  }
                 />
               </View>
             </View>

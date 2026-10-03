@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { InspectionForm, InspectionPoint } from "../models/InspectionChecklist";
 import { StoredSignature } from "./SignatureService";
+import { StoredPhoto } from "./PhotoService";
 import ApiService from './ApiService';
 import { Platform } from 'react-native';
 
@@ -9,6 +10,38 @@ export interface PdfGenerationData {
   formData: InspectionForm;
   inspectorSignature?: StoredSignature | null;
   verifiedBySignature?: StoredSignature | null;
+  photos?: StoredPhoto[];
+}
+
+const BASE64_CHARS =
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/**
+ * Manually encode an ArrayBuffer to a base64 string.
+ * Implemented by hand (rather than relying on `btoa`/`Buffer`, which are not
+ * reliably available in React Native/Hermes) so binary PDF data survives the
+ * round trip byte-for-byte. Losing even one byte corrupts the PDF's xref
+ * table and stream lengths, which is what made generated PDFs fail to open
+ * in strict readers like Foxit.
+ */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let result = '';
+
+  for (let i = 0; i < bytes.length; i += 3) {
+    const byte1 = bytes[i];
+    const byte2 = i + 1 < bytes.length ? bytes[i + 1] : undefined;
+    const byte3 = i + 2 < bytes.length ? bytes[i + 2] : undefined;
+
+    result += BASE64_CHARS[byte1 >> 2];
+    result += BASE64_CHARS[((byte1 & 0x03) << 4) | (byte2 !== undefined ? byte2 >> 4 : 0)];
+    result += byte2 !== undefined
+      ? BASE64_CHARS[((byte2 & 0x0f) << 2) | (byte3 !== undefined ? byte3 >> 6 : 0)]
+      : '=';
+    result += byte3 !== undefined ? BASE64_CHARS[byte3 & 0x3f] : '=';
+  }
+
+  return result;
 }
 
 /**
@@ -35,7 +68,7 @@ class PdfService {
    */
   async generatePdfFromTemplate(data: PdfGenerationData): Promise<string> {
     try {
-      const { formData, inspectionPoints, inspectorSignature, verifiedBySignature } = data;
+      const { formData, inspectionPoints, inspectorSignature, verifiedBySignature, photos } = data;
 
       // Prepare payload for backend
       const payload = {
@@ -43,6 +76,9 @@ class PdfService {
           truckNumber: formData.truckNumber,
           trailerNumber: formData.trailerNumber,
           sealNumber: formData.sealNumber,
+          freightBillNumber: formData.freightBillNumber,
+          loadOrigin: formData.loadOrigin || '',
+          loadDestination: formData.loadDestination || '',
           date: formData.date,
           time: formData.time,
           printName: formData.printName,
@@ -58,6 +94,17 @@ class PdfService {
           title: point.title,
           description: point.description,
           checked: point.checked,
+        })),
+        // Each photo becomes its own appended PDF page (image + caption)
+        photos: (photos || []).map(photo => ({
+          base64Data: photo.base64Data,
+          takenAt: photo.takenAt,
+          sealNumber: photo.sealNumber,
+          freightBillNumber: photo.freightBillNumber,
+          loadOrigin: photo.loadOrigin,
+          loadDestination: photo.loadDestination,
+          truckNumber: photo.truckNumber,
+          trailerNumber: photo.trailerNumber,
         })),
       };
 
@@ -76,16 +123,17 @@ class PdfService {
         throw new Error(`Backend error (${response.status}): ${errorText}`);
       }
 
-      // Get PDF content as text
-      const pdfContent = await response.text();
-
-      // Platform-specific handling
+      // Platform-specific handling.
+      // IMPORTANT: a PDF is binary data. Reading it via response.text() (as this
+      // used to do) decodes it as UTF-8, which silently corrupts any byte that
+      // isn't valid UTF-8 and breaks the PDF's xref table/stream lengths. We
+      // must read it as binary (blob/arrayBuffer) end-to-end to keep it byte-exact.
       if (Platform.OS === 'web') {
-        // Web: Use Blob and download
-        const blob = new Blob([pdfContent], { type: 'application/pdf' });
+        // Web: read as a real Blob (binary-safe) and download it directly.
+        const blob = await response.blob();
         const url = URL.createObjectURL(blob);
         const filename = `inspection_${Date.now()}.pdf`;
-        
+
         // Create download link
         const link = document.createElement('a');
         link.href = url;
@@ -97,12 +145,16 @@ class PdfService {
         
         return filename;
       } else {
-        // Native (iOS/Android): Use FileSystem
+        // Native (iOS/Android): read as binary and base64-encode it ourselves,
+        // then write with Base64 encoding so FileSystem stores the exact bytes.
+        const arrayBuffer = await response.arrayBuffer();
+        const base64Pdf = arrayBufferToBase64(arrayBuffer);
+
         const filename = `inspection_${Date.now()}.pdf`;
         const filePath = `${FileSystem.documentDirectory}${filename}`;
 
-        await FileSystem.writeAsStringAsync(filePath, pdfContent, {
-          encoding: FileSystem.EncodingType.UTF8,
+        await FileSystem.writeAsStringAsync(filePath, base64Pdf, {
+          encoding: FileSystem.EncodingType.Base64,
         });
 
         return filePath;
