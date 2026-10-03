@@ -24,6 +24,11 @@ const inspectionSchema = Joi.object({
   sealNumber: Joi.string().trim().required().messages({
     'string.empty': 'Seal number is required',
   }),
+  freightBillNumber: Joi.string().trim().required().messages({
+    'string.empty': 'Freight bill number is required',
+  }),
+  loadOrigin: Joi.string().trim().optional().allow(''),
+  loadDestination: Joi.string().trim().optional().allow(''),
   inspectionPoints: Joi.array()
     .items(
       Joi.object({
@@ -64,6 +69,24 @@ const inspectionSchema = Joi.object({
   pdfFileName: Joi.string().optional().allow(null, ''),
   recipientEmail: emailValidation.optional().allow(null, ''),
   notes: Joi.string().optional().allow(''),
+  photos: Joi.array()
+    .items(
+      Joi.object({
+        base64Data: Joi.string().required().max(13981014), // ~10MB in base64
+        takenAt: Joi.string().optional().allow(null, ''),
+        sealNumber: Joi.string().optional().allow(null, ''),
+        freightBillNumber: Joi.string().optional().allow(null, ''),
+        loadOrigin: Joi.string().optional().allow(null, ''),
+        loadDestination: Joi.string().optional().allow(null, ''),
+        truckNumber: Joi.string().optional().allow(null, ''),
+        trailerNumber: Joi.string().optional().allow(null, ''),
+      })
+    )
+    .optional()
+    .default([])
+    .messages({
+      'array.base': 'Photos must be an array',
+    }),
 });
 
 /**

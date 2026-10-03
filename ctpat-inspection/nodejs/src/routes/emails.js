@@ -24,6 +24,7 @@ router.post(
         recipientEmail,
         inspectionData,
         inspectionPoints,
+        photos,
         includeAttachment = true,
       } = req.body;
 
@@ -59,7 +60,8 @@ router.post(
           console.log('[Email Route] Generating PDF for attachment...');
           const pdfBuffer = await PdfFillerService.generateFilledPdf(
             inspectionData,
-            inspectionPoints
+            inspectionPoints,
+            photos
           );
 
           options.attachments = [

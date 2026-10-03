@@ -24,6 +24,11 @@ export interface InspectionForm {
   trailerNumber: string;
   sealNumber: string;
 
+  // Shipment Information
+  freightBillNumber: string;
+  loadOrigin?: string;
+  loadDestination?: string;
+
   // Seal Verification
   verifiedByName: string;
   verifiedBySignatureId?: string;
@@ -181,6 +186,9 @@ export const DEFAULT_FORM_DATA: InspectionForm = {
   truckNumber: '',
   trailerNumber: '',
   sealNumber: '',
+  freightBillNumber: '',
+  loadOrigin: '',
+  loadDestination: '',
   verifiedByName: '',
   verifiedBySignatureId: undefined,
   date: new Date().toISOString().split('T')[0],

@@ -127,6 +127,13 @@ const sendInspectionReport = async (
         <li><strong>Seal Number:</strong> ${inspectionData.sealNumber}</li>
       </ul>
 
+      <h3>Shipment Information</h3>
+      <ul>
+        <li><strong>Freight Bill Number:</strong> ${inspectionData.freightBillNumber || 'N/A'}</li>
+        ${inspectionData.loadOrigin ? `<li><strong>Load Origin:</strong> ${inspectionData.loadOrigin}</li>` : ''}
+        ${inspectionData.loadDestination ? `<li><strong>Load Destination:</strong> ${inspectionData.loadDestination}</li>` : ''}
+      </ul>
+
       <h3>Inspection Details</h3>
       <ul>
         <li><strong>Date:</strong> ${inspectionData.date}</li>
@@ -159,6 +166,11 @@ Vehicle Information:
   Truck Number: ${inspectionData.truckNumber}
   Trailer Number: ${inspectionData.trailerNumber}
   Seal Number: ${inspectionData.sealNumber}
+
+Shipment Information:
+  Freight Bill Number: ${inspectionData.freightBillNumber || 'N/A'}
+  ${inspectionData.loadOrigin ? `Load Origin: ${inspectionData.loadOrigin}` : ''}
+  ${inspectionData.loadDestination ? `Load Destination: ${inspectionData.loadDestination}` : ''}
 
 Inspection Details:
   Date: ${inspectionData.date}

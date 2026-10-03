@@ -49,7 +49,7 @@ const checkDuplicateSubmission = async (idempotencyKey) => {
 router.post(
   '/generate-pdf',
   asyncHandler(async (req, res) => {
-    const { inspectionData, inspectionPoints } = req.body;
+    const { inspectionData, inspectionPoints, photos } = req.body;
 
     if (!inspectionData || !inspectionPoints) {
       throw new APIError('inspectionData and inspectionPoints are required', 400);
@@ -59,7 +59,8 @@ router.post(
       // Generate filled PDF
       const pdfBuffer = await PdfFillerService.generateFilledPdf(
         inspectionData,
-        inspectionPoints
+        inspectionPoints,
+        photos
       );
 
       // Set response headers
@@ -87,7 +88,7 @@ router.post(
 router.post(
   '/download-pdf',
   asyncHandler(async (req, res) => {
-    const { inspectionData, inspectionPoints } = req.body;
+    const { inspectionData, inspectionPoints, photos } = req.body;
 
     if (!inspectionData || !inspectionPoints) {
       throw new APIError('inspectionData and inspectionPoints are required', 400);
@@ -97,7 +98,8 @@ router.post(
       // Generate filled PDF
       const pdfBuffer = await PdfFillerService.generateFilledPdf(
         inspectionData,
-        inspectionPoints
+        inspectionPoints,
+        photos
       );
 
       // Set response headers for download/preview
@@ -393,6 +395,7 @@ router.post(
       recipientEmail,
       inspectionData,
       inspectionPoints,
+      photos,
       smtpConfig // Optional: { host, port, user, password, fromEmail }
     } = req.body;
 
@@ -416,7 +419,8 @@ router.post(
       // Generate PDF with inspection data
       const pdfBuffer = await PdfFillerService.generateFilledPdf(
         inspectionData,
-        inspectionPoints
+        inspectionPoints,
+        photos
       );
 
       // Import email service

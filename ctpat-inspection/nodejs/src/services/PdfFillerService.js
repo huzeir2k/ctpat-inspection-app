@@ -45,7 +45,7 @@ class PdfFillerService {
    * @param {array} inspectionPoints - 18-point checklist items
    * @returns {Buffer} - Filled PDF file buffer (can be sent to frontend or saved)
    */
-  static async generateFilledPdf(inspectionData, inspectionPoints) {
+  static async generateFilledPdf(inspectionData, inspectionPoints, photos) {
     try {
       // Load the original PDF form from local assets
       const pdfBytes = this.loadPdfTemplate();
@@ -108,6 +108,11 @@ class PdfFillerService {
 
         sealNumberX: 149 * scaleX,
         sealNumberY: pdfHeight - 716 * scaleY,
+
+        // Freight Bill Number - placed beside Seal Number (no dedicated
+        // printed field on the original form). Verify/adjust visually.
+        freightBillNumberX: 420 * scaleX,
+        freightBillNumberY: pdfHeight - 716 * scaleY,
 
         // Signature areas
         inspectorSignatureX: 100 * scaleX,
@@ -179,6 +184,11 @@ class PdfFillerService {
         drawText(inspectionData.sealNumber, coords.sealNumberX, coords.sealNumberY, 11);
       }
 
+      // Fill freight bill number
+      if (inspectionData.freightBillNumber) {
+        drawText(`FB#: ${inspectionData.freightBillNumber}`, coords.freightBillNumberX, coords.freightBillNumberY, 11);
+      }
+
       // Draw security check checkbox if checked
       if (inspectionData.securityCheckboxChecked) {
         drawXMark(coords.securityCheckX, coords.securityCheckY, 6);
@@ -202,8 +212,16 @@ class PdfFillerService {
         console.log('[PdfFiller] Verified-by signature present (image embedding not yet implemented)');
       }
 
-      // Serialize PDF to bytes
-      const filledPdfBytes = await pdfDoc.save();
+      // Serialize PDF to bytes. useObjectStreams: false avoids compressed
+      // cross-reference streams, which some strict PDF readers (e.g. Foxit)
+      // are pickier about than lenient browser-based viewers.
+      // Append one page per captured photo: image on top, caption below
+      // (caption is drawn as separate text, never burned into the image).
+      if (Array.isArray(photos) && photos.length > 0) {
+        await this.addPhotoPages(pdfDoc, photos, pdfWidth, pdfHeight);
+      }
+
+      const filledPdfBytes = await pdfDoc.save({ useObjectStreams: false });
       console.log(`✓ PDF generated successfully (${filledPdfBytes.length} bytes)`);
 
       return filledPdfBytes;
@@ -211,6 +229,96 @@ class PdfFillerService {
       console.error('❌ Failed to generate filled PDF:', error.message);
       throw error;
     }
+  }
+
+  /**
+   * Appends one page per photo to the PDF document: the photo image is
+   * drawn near the top of the page, and a caption (timestamp, freight bill
+   * number, seal number, load origin/destination, truck/trailer) is drawn
+   * as text below it.
+   * @param {PDFDocument} pdfDoc
+   * @param {array} photos
+   * @param {number} pageWidth
+   * @param {number} pageHeight
+   */
+  static async addPhotoPages(pdfDoc, photos, pageWidth, pageHeight) {
+    const margin = 36;
+    const captionFontSize = 11;
+    const captionLineHeight = 16;
+    const maxImageWidth = pageWidth - margin * 2;
+
+    for (const photo of photos) {
+      if (!photo || !photo.base64Data) continue;
+
+      try {
+        const imageBytes = Buffer.from(photo.base64Data, 'base64');
+
+        let embeddedImage;
+        try {
+          embeddedImage = await pdfDoc.embedJpg(imageBytes);
+        } catch (jpgError) {
+          embeddedImage = await pdfDoc.embedPng(imageBytes);
+        }
+
+        const captionLines = this.buildPhotoCaptionLines(photo);
+        const captionBlockHeight = captionLines.length * captionLineHeight;
+
+        const page = pdfDoc.addPage([pageWidth, pageHeight]);
+
+        const maxImageHeight = pageHeight - margin * 2 - captionBlockHeight - 20;
+        const scale = Math.min(
+          maxImageWidth / embeddedImage.width,
+          maxImageHeight / embeddedImage.height,
+          1
+        );
+        const drawWidth = embeddedImage.width * scale;
+        const drawHeight = embeddedImage.height * scale;
+        const imageX = (pageWidth - drawWidth) / 2;
+        const imageY = pageHeight - margin - drawHeight;
+
+        page.drawImage(embeddedImage, {
+          x: imageX,
+          y: imageY,
+          width: drawWidth,
+          height: drawHeight,
+        });
+
+        let captionY = imageY - 24;
+        captionLines.forEach((line) => {
+          page.drawText(line, {
+            x: margin,
+            y: captionY,
+            size: captionFontSize,
+            color: rgb(0, 0, 0),
+          });
+          captionY -= captionLineHeight;
+        });
+
+        console.log('✓ Added photo page to PDF');
+      } catch (error) {
+        console.warn('Failed to embed photo page:', error.message);
+      }
+    }
+  }
+
+  /**
+   * Builds the caption text lines for a photo page.
+   */
+  static buildPhotoCaptionLines(photo) {
+    const lines = [];
+    const takenAt = photo.takenAt ? new Date(photo.takenAt) : null;
+    lines.push(`Date/Time: ${takenAt ? takenAt.toLocaleString() : 'Unknown'}`);
+
+    if (photo.freightBillNumber) lines.push(`Freight Bill Number: ${photo.freightBillNumber}`);
+    if (photo.sealNumber) lines.push(`Seal Number: ${photo.sealNumber}`);
+    if (photo.loadOrigin || photo.loadDestination) {
+      lines.push(`Load Origin / Destination: ${photo.loadOrigin || '—'} / ${photo.loadDestination || '—'}`);
+    }
+    if (photo.truckNumber || photo.trailerNumber) {
+      lines.push(`Truck/Trailer: ${photo.truckNumber || '—'} / ${photo.trailerNumber || '—'}`);
+    }
+
+    return lines;
   }
 
   /**
@@ -222,7 +330,7 @@ class PdfFillerService {
    * @param {string} outputDir - Directory to save PDF (optional)
    * @returns {Promise<string>} - File path to saved PDF
    */
-  static async generateAndSavePdf(inspectionData, inspectionPoints, outputDir = './pdfs') {
+  static async generateAndSavePdf(inspectionData, inspectionPoints, outputDir = './pdfs', photos) {
     try {
       // Ensure output directory exists
       if (!fs.existsSync(outputDir)) {
@@ -230,7 +338,7 @@ class PdfFillerService {
       }
 
       // Generate filled PDF
-      const pdfBytes = await this.generateFilledPdf(inspectionData, inspectionPoints);
+      const pdfBytes = await this.generateFilledPdf(inspectionData, inspectionPoints, photos);
 
       // Create filename with timestamp
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');

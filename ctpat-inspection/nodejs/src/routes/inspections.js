@@ -132,6 +132,9 @@ router.post(
       truckNumber,
       trailerNumber,
       sealNumber,
+      freightBillNumber,
+      loadOrigin,
+      loadDestination,
       verifiedByName,
       printName,
       date,
@@ -153,11 +156,12 @@ router.post(
       const stmt = db.prepare(`
         INSERT INTO inspections (
           inspectionId, truckNumber, trailerNumber, sealNumber,
+          freightBillNumber, loadOrigin, loadDestination,
           verifiedByName, printName, date, time,
           securityCheckboxChecked, agriculturalPestCheckboxChecked,
           recipientEmail, inspectionPoints,
           completionPercentage, status, createdAt, updatedAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       stmt.run(
@@ -165,6 +169,9 @@ router.post(
         truckNumber,
         trailerNumber || null,
         sealNumber || null,
+        freightBillNumber || null,
+        loadOrigin || null,
+        loadDestination || null,
         verifiedByName || null,
         printName || null,
         date || null,

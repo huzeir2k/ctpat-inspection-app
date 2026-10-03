@@ -52,6 +52,21 @@ const inspectionSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    freightBillNumber: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    loadOrigin: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    loadDestination: {
+      type: String,
+      trim: true,
+      default: '',
+    },
 
     // Inspection Points
     inspectionPoints: [inspectionPointSchema],
