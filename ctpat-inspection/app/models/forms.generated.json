@@ -1,0 +1,735 @@
+{
+  "forms": [
+    {
+      "id": "truck-trailer-17-18",
+      "label": "17/18-Point Truck & Trailer",
+      "title": "17/18 - POINT TRUCK & TRAILER SECURITY & AGRICULTURAL (PEST) INSPECTION FORM",
+      "version": 1,
+      "checklist": [
+        {
+          "id": "bumper-tires-rims",
+          "label": "Bumper/Tires/Rims"
+        },
+        {
+          "id": "engine-battery-box",
+          "label": "Engine/Battery Box"
+        },
+        {
+          "id": "tires-truck-trailer",
+          "label": "Tires (truck & trailer)"
+        },
+        {
+          "id": "floor-truck",
+          "label": "Floor"
+        },
+        {
+          "id": "fuel-tanks",
+          "label": "Fuel Tanks"
+        },
+        {
+          "id": "interior-cab-sleeper",
+          "label": "Interior Cab Compartments/Sleeper"
+        },
+        {
+          "id": "air-breather",
+          "label": "Air Breather"
+        },
+        {
+          "id": "fairing-roof",
+          "label": "Faring/Roof"
+        },
+        {
+          "id": "fifth-wheel-skid-plate",
+          "label": "Fifth Wheel/Skid Plate"
+        },
+        {
+          "id": "outside-undercarriage",
+          "label": "Outside/Undercarriage"
+        },
+        {
+          "id": "floor-trailer",
+          "label": "Floor"
+        },
+        {
+          "id": "inside-outside-doors",
+          "label": "Inside/Outside Doors"
+        },
+        {
+          "id": "side-walls",
+          "label": "Side Walls (Left/Right)"
+        },
+        {
+          "id": "ceiling-roof",
+          "label": "Ceiling/Roof"
+        },
+        {
+          "id": "front-wall-exterior",
+          "label": "Front Wall/Exterior Front/Sides"
+        },
+        {
+          "id": "refrigeration-unit",
+          "label": "Refrigeration Unit"
+        },
+        {
+          "id": "rear-bumper-doors",
+          "label": "Rear (Bumper/Doors)"
+        },
+        {
+          "id": "agricultural-pests",
+          "label": "Agricultural pests and debris",
+          "description": "Check for agricultural pests and debris in all points. Also check areas of refrigerated trailers that have an air intake, fan housing, refrigeration unit, etc. These locations must also be checked for debris, nest pods, insects, etc."
+        }
+      ],
+      "fields": [
+        {
+          "key": "crossDock",
+          "type": "choice",
+          "label": "Cross-Dock",
+          "section": "Vehicle Information",
+          "required": true,
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes"
+            },
+            {
+              "value": "no",
+              "label": "No"
+            }
+          ]
+        },
+        {
+          "key": "crossDockDirection",
+          "type": "choice",
+          "label": "Cross-Dock Direction",
+          "section": "Vehicle Information",
+          "required": true,
+          "options": [
+            {
+              "value": "into_us",
+              "label": "Into U.S."
+            },
+            {
+              "value": "into_mexico",
+              "label": "Into Mexico"
+            }
+          ],
+          "showWhen": {
+            "field": "crossDock",
+            "equals": "yes"
+          }
+        },
+        {
+          "key": "truckTrailerNumbers",
+          "type": "text",
+          "label": "Truck/Trailer Numbers",
+          "section": "Vehicle Information",
+          "required": true,
+          "maxLength": 60
+        },
+        {
+          "key": "sealNumber",
+          "type": "text",
+          "label": "Seal Number",
+          "section": "Vehicle Information",
+          "required": true,
+          "maxLength": 30
+        },
+        {
+          "key": "sealVerifiedByName",
+          "type": "text",
+          "label": "Seal Verified By (Print Name)",
+          "section": "Seal Verification",
+          "required": true,
+          "maxLength": 40
+        },
+        {
+          "key": "sealVerifiedBySignature",
+          "type": "signature",
+          "label": "Seal Verified By (Signature)",
+          "section": "Seal Verification",
+          "required": true
+        },
+        {
+          "key": "securityPassed",
+          "type": "boolean",
+          "label": "Security Check – Passed",
+          "section": "Compliance Checks",
+          "required": true,
+          "mustBeTrue": true
+        },
+        {
+          "key": "agriculturalPassed",
+          "type": "boolean",
+          "label": "Agricultural/Pest Check – Passed",
+          "section": "Compliance Checks",
+          "required": true,
+          "mustBeTrue": true
+        },
+        {
+          "key": "vvtt",
+          "type": "choice",
+          "label": "VVTT Check (View, Verify, Tug & Twist)",
+          "section": "Compliance Checks",
+          "required": true,
+          "options": [
+            {
+              "value": "passed",
+              "label": "Passed"
+            },
+            {
+              "value": "na_domestic",
+              "label": "N/A – Domestic Transport Only"
+            }
+          ]
+        },
+        {
+          "key": "date",
+          "type": "date",
+          "label": "Date",
+          "section": "Sign Off",
+          "required": true
+        },
+        {
+          "key": "time",
+          "type": "time",
+          "label": "Time",
+          "section": "Sign Off",
+          "required": true
+        },
+        {
+          "key": "printName",
+          "type": "text",
+          "label": "Print Name",
+          "section": "Sign Off",
+          "required": true,
+          "maxLength": 40
+        },
+        {
+          "key": "inspectorSignature",
+          "type": "signature",
+          "label": "Signature",
+          "section": "Sign Off",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "container-7-8",
+      "label": "7/8-Point Container",
+      "title": "7/8 - POINT CONTAINER SECURITY & AGRICULTURAL (PEST) INSPECTION FORM",
+      "version": 1,
+      "checklist": [
+        {
+          "id": "outside-undercarriage",
+          "label": "Outside/Undercarriage"
+        },
+        {
+          "id": "inside-outside-doors",
+          "label": "Inside/Outside Doors"
+        },
+        {
+          "id": "right-side",
+          "label": "Right Side"
+        },
+        {
+          "id": "left-side",
+          "label": "Left Side"
+        },
+        {
+          "id": "front-wall",
+          "label": "Front Wall"
+        },
+        {
+          "id": "ceiling-roof",
+          "label": "Ceiling/Roof"
+        },
+        {
+          "id": "floor",
+          "label": "Floor"
+        },
+        {
+          "id": "agricultural-pests",
+          "label": "Agricultural pests and debris",
+          "description": "Check for agricultural pests and debris in all points. Also check areas of refrigerated containers that have an air intake, fan housing, refrigeration unit, etc. These locations must also be checked for debris, nest pods, insects, etc."
+        }
+      ],
+      "fields": [
+        {
+          "key": "crossDock",
+          "type": "choice",
+          "label": "Cross-Dock",
+          "section": "Vehicle Information",
+          "required": true,
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes"
+            },
+            {
+              "value": "no",
+              "label": "No"
+            }
+          ]
+        },
+        {
+          "key": "crossDockDirection",
+          "type": "choice",
+          "label": "Cross-Dock Direction",
+          "section": "Vehicle Information",
+          "required": true,
+          "options": [
+            {
+              "value": "into_us",
+              "label": "Into U.S."
+            },
+            {
+              "value": "into_mexico",
+              "label": "Into Mexico"
+            }
+          ],
+          "showWhen": {
+            "field": "crossDock",
+            "equals": "yes"
+          }
+        },
+        {
+          "key": "containerNumber",
+          "type": "text",
+          "label": "Container Number",
+          "section": "Vehicle Information",
+          "required": true,
+          "maxLength": 20
+        },
+        {
+          "key": "sealNumber",
+          "type": "text",
+          "label": "Seal Number",
+          "section": "Vehicle Information",
+          "required": true,
+          "maxLength": 30
+        },
+        {
+          "key": "sealVerifiedByName",
+          "type": "text",
+          "label": "Seal Verified By (Print Name)",
+          "section": "Seal Verification",
+          "required": true,
+          "maxLength": 40
+        },
+        {
+          "key": "sealVerifiedBySignature",
+          "type": "signature",
+          "label": "Seal Verified By (Signature)",
+          "section": "Seal Verification",
+          "required": true
+        },
+        {
+          "key": "securityPassed",
+          "type": "boolean",
+          "label": "Security Check – Passed",
+          "section": "Compliance Checks",
+          "required": true,
+          "mustBeTrue": true
+        },
+        {
+          "key": "agriculturalPassed",
+          "type": "boolean",
+          "label": "Agricultural/Pest Check – Passed",
+          "section": "Compliance Checks",
+          "required": true,
+          "mustBeTrue": true
+        },
+        {
+          "key": "vvtt",
+          "type": "choice",
+          "label": "VVTT Check (View, Verify, Tug & Twist)",
+          "section": "Compliance Checks",
+          "required": true,
+          "options": [
+            {
+              "value": "passed",
+              "label": "Passed"
+            },
+            {
+              "value": "na_domestic",
+              "label": "N/A – Domestic Transport Only"
+            }
+          ]
+        },
+        {
+          "key": "date",
+          "type": "date",
+          "label": "Date",
+          "section": "Sign Off",
+          "required": true
+        },
+        {
+          "key": "time",
+          "type": "time",
+          "label": "Time",
+          "section": "Sign Off",
+          "required": true
+        },
+        {
+          "key": "printName",
+          "type": "text",
+          "label": "Print Name",
+          "section": "Sign Off",
+          "required": true,
+          "maxLength": 40
+        },
+        {
+          "key": "inspectorSignature",
+          "type": "signature",
+          "label": "Signature",
+          "section": "Sign Off",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "straight-truck-7-8",
+      "label": "7/8-Point Straight Truck",
+      "title": "7/8 - POINT STRAIGHT TRUCK SECURITY & AGRICULTURAL (PEST) INSPECTION FORM",
+      "version": 1,
+      "checklist": [
+        {
+          "id": "front-wall-bulkhead",
+          "label": "Front Wall/Bulkhead"
+        },
+        {
+          "id": "left-side-wall",
+          "label": "Left Side Wall"
+        },
+        {
+          "id": "right-side-wall",
+          "label": "Right Side Wall"
+        },
+        {
+          "id": "floor",
+          "label": "Floor"
+        },
+        {
+          "id": "ceiling-roof",
+          "label": "Ceiling/Roof"
+        },
+        {
+          "id": "doors",
+          "label": "Doors (Rear Door/Side Door)"
+        },
+        {
+          "id": "outside-undercarriage",
+          "label": "Outside/Undercarriage"
+        },
+        {
+          "id": "agricultural-pests",
+          "label": "Agricultural pests and debris",
+          "description": "Check for agricultural pests and debris in all points."
+        }
+      ],
+      "fields": [
+        {
+          "key": "sealNumber",
+          "type": "text",
+          "label": "Seal Number",
+          "section": "Vehicle Information",
+          "required": true,
+          "maxLength": 30
+        },
+        {
+          "key": "sealVerifiedByName",
+          "type": "text",
+          "label": "Seal Verified By (Print Name)",
+          "section": "Seal Verification",
+          "required": true,
+          "maxLength": 40
+        },
+        {
+          "key": "sealVerifiedBySignature",
+          "type": "signature",
+          "label": "Seal Verified By (Signature)",
+          "section": "Seal Verification",
+          "required": true
+        },
+        {
+          "key": "securityPassed",
+          "type": "boolean",
+          "label": "Security Check – Passed",
+          "section": "Compliance Checks",
+          "required": true,
+          "mustBeTrue": true
+        },
+        {
+          "key": "agriculturalPassed",
+          "type": "boolean",
+          "label": "Agricultural/Pest Check – Passed",
+          "section": "Compliance Checks",
+          "required": true,
+          "mustBeTrue": true
+        },
+        {
+          "key": "vvtt",
+          "type": "choice",
+          "label": "VVTT Check (View, Verify, Tug & Twist)",
+          "section": "Compliance Checks",
+          "required": true,
+          "options": [
+            {
+              "value": "passed",
+              "label": "Passed"
+            },
+            {
+              "value": "na_domestic",
+              "label": "N/A – Domestic Transport Only"
+            }
+          ]
+        },
+        {
+          "key": "date",
+          "type": "date",
+          "label": "Date",
+          "section": "Sign Off",
+          "required": true
+        },
+        {
+          "key": "time",
+          "type": "time",
+          "label": "Time",
+          "section": "Sign Off",
+          "required": true
+        },
+        {
+          "key": "printName",
+          "type": "text",
+          "label": "Print Name",
+          "section": "Sign Off",
+          "required": true,
+          "maxLength": 40
+        },
+        {
+          "key": "inspectorSignature",
+          "type": "signature",
+          "label": "Signature",
+          "section": "Sign Off",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "cargo-van-7-8",
+      "label": "7/8-Point Cargo Van",
+      "title": "7/8 – Point Cargo Van Security & Agricultural (Pest) Inspection Form",
+      "version": 1,
+      "checklist": [
+        {
+          "id": "undercarriage-exterior-underside",
+          "label": "Undercarriage/Exterior Underside"
+        },
+        {
+          "id": "doors",
+          "label": "Doors (Rear & Side) – Inside & Outside"
+        },
+        {
+          "id": "right-side-exterior",
+          "label": "Right Side Exterior"
+        },
+        {
+          "id": "left-side-exterior",
+          "label": "Left Side Exterior"
+        },
+        {
+          "id": "front-wall-bulkhead",
+          "label": "Front Wall/Bulkhead (Interior)"
+        },
+        {
+          "id": "ceiling-roof",
+          "label": "Ceiling/Roof"
+        },
+        {
+          "id": "floor",
+          "label": "Floor (Interior Cargo Area)"
+        },
+        {
+          "id": "agricultural-pests",
+          "label": "Agriculture/Pest Inspection (CTPAT & USDA)"
+        }
+      ],
+      "fields": [
+        {
+          "key": "sealNumber",
+          "type": "text",
+          "label": "Seal Number",
+          "section": "Vehicle Information",
+          "required": true,
+          "maxLength": 30
+        },
+        {
+          "key": "sealVerifiedByName",
+          "type": "text",
+          "label": "Seal Verified By (Print Name)",
+          "section": "Seal Verification",
+          "required": true,
+          "maxLength": 40
+        },
+        {
+          "key": "sealVerifiedBySignature",
+          "type": "signature",
+          "label": "Seal Verified By (Signature)",
+          "section": "Seal Verification",
+          "required": true
+        },
+        {
+          "key": "securityPassed",
+          "type": "boolean",
+          "label": "Security Check – Passed",
+          "section": "Compliance Checks",
+          "required": true,
+          "mustBeTrue": true
+        },
+        {
+          "key": "agriculturalPassed",
+          "type": "boolean",
+          "label": "Agricultural/Pest Check – Passed",
+          "section": "Compliance Checks",
+          "required": true,
+          "mustBeTrue": true
+        },
+        {
+          "key": "vvtt",
+          "type": "choice",
+          "label": "VVTT Check (View, Verify, Tug & Twist)",
+          "section": "Compliance Checks",
+          "required": true,
+          "options": [
+            {
+              "value": "passed",
+              "label": "Passed"
+            },
+            {
+              "value": "na_domestic",
+              "label": "N/A – Domestic Transport Only"
+            }
+          ]
+        },
+        {
+          "key": "date",
+          "type": "date",
+          "label": "Date",
+          "section": "Sign Off",
+          "required": true
+        },
+        {
+          "key": "time",
+          "type": "time",
+          "label": "Time",
+          "section": "Sign Off",
+          "required": true
+        },
+        {
+          "key": "printName",
+          "type": "text",
+          "label": "Print Name",
+          "section": "Sign Off",
+          "required": true,
+          "maxLength": 40
+        },
+        {
+          "key": "inspectorSignature",
+          "type": "signature",
+          "label": "Signature",
+          "section": "Sign Off",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "flatbed-6",
+      "label": "6-Point Flatbed",
+      "title": "6-POINT FLATBED TRAILER SECURITY & AGRICULTURAL (PEST) INSPECTION FORM",
+      "version": 1,
+      "checklist": [
+        {
+          "id": "outside-undercarriage",
+          "label": "Outside/Undercarriage"
+        },
+        {
+          "id": "deck-floor",
+          "label": "Deck/Floor"
+        },
+        {
+          "id": "tension-devices",
+          "label": "Tension Devices"
+        },
+        {
+          "id": "tailgate",
+          "label": "Tailgate"
+        },
+        {
+          "id": "other-components",
+          "label": "Any other component & equipment used for load"
+        },
+        {
+          "id": "agricultural-pests",
+          "label": "Agricultural pests and debris",
+          "description": "Check for agricultural pests and debris in all points."
+        }
+      ],
+      "fields": [
+        {
+          "key": "unitNumber",
+          "type": "text",
+          "label": "Truck/Trailer/IIT Number",
+          "section": "Vehicle Information",
+          "required": true,
+          "maxLength": 40
+        },
+        {
+          "key": "securityPassed",
+          "type": "boolean",
+          "label": "Security Check – Passed",
+          "section": "Compliance Checks",
+          "required": true,
+          "mustBeTrue": true
+        },
+        {
+          "key": "agriculturalPassed",
+          "type": "boolean",
+          "label": "Agricultural/Pest Check – Passed",
+          "section": "Compliance Checks",
+          "required": true,
+          "mustBeTrue": true
+        },
+        {
+          "key": "date",
+          "type": "date",
+          "label": "Date",
+          "section": "Sign Off",
+          "required": true
+        },
+        {
+          "key": "time",
+          "type": "time",
+          "label": "Time",
+          "section": "Sign Off",
+          "required": true
+        },
+        {
+          "key": "printName",
+          "type": "text",
+          "label": "Print Name",
+          "section": "Sign Off",
+          "required": true,
+          "maxLength": 40
+        },
+        {
+          "key": "inspectorSignature",
+          "type": "signature",
+          "label": "Signature",
+          "section": "Sign Off",
+          "required": true
+        }
+      ]
+    }
+  ]
+}

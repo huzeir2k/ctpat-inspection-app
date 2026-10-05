@@ -17,8 +17,9 @@ class APIError extends Error {
  * Must have 4 parameters (err, req, res, next) to be recognized as error middleware
  */
 const errorHandler = (err, req, res, next) => {
-  // Log error to console in development
-  if (process.env.NODE_ENV !== 'production') {
+  if (process.env.NODE_ENV === 'production') {
+    if (!(err instanceof APIError)) console.error('Unhandled error:', err.message);
+  } else if (process.env.NODE_ENV !== 'test') {
     console.error('🔴 Error:', {
       message: err.message,
       statusCode: err.statusCode || 500,
@@ -29,7 +30,10 @@ const errorHandler = (err, req, res, next) => {
   }
 
   const statusCode = err.statusCode || 500;
-  const message = err.message || 'Internal Server Error';
+  const isExpected = err instanceof APIError || err.expose === true; // APIError or body-parser error
+  // Never leak internals (database, storage, library messages) for unexpected failures.
+  const message =
+    isExpected || process.env.NODE_ENV !== 'production' ? err.message || 'Internal Server Error' : 'Internal Server Error';
 
   res.status(statusCode).json({
     success: false,
@@ -50,35 +54,8 @@ const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
 
-/**
- * Validate request body with a schema
- */
-const validateRequest = (schema) => {
-  return (req, res, next) => {
-    const { error, value } = schema.validate(req.body, {
-      abortEarly: false,
-      stripUnknown: true,
-    });
-
-    if (error) {
-      const messages = error.details.map((d) => d.message).join(', ');
-      return res.status(400).json({
-        success: false,
-        error: {
-          message: `Validation error: ${messages}`,
-          statusCode: 400,
-        },
-      });
-    }
-
-    req.validatedBody = value;
-    next();
-  };
-};
-
 module.exports = {
   APIError,
   errorHandler,
   asyncHandler,
-  validateRequest,
 };

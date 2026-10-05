@@ -6,8 +6,9 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "test": "node --test test/",
-    "forms:preview": "node scripts/preview-forms.js"
+    "test": "node --test \"test/*.test.js\"",
+    "forms:preview": "node scripts/preview-forms.js",
+    "forms:export": "node scripts/export-forms.js"
   },
   "engines": {
     "node": ">=20.0.0"
