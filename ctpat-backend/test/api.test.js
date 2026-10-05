@@ -133,8 +133,8 @@ test('API', async (t) => {
     assert.equal(response.headers.get('content-type'), 'application/pdf');
   });
 
-  await t.test('request bodies over 1 MB are refused', async () => {
-    const response = await call('POST', '/api/inspections', { token: ALICE, body: { padding: 'x'.repeat(1100000) } });
+  await t.test('request bodies over 2 MB are refused', async () => {
+    const response = await call('POST', '/api/inspections', { token: ALICE, body: { padding: 'x'.repeat(2100000) } });
     assert.equal(response.status, 413);
   });
 

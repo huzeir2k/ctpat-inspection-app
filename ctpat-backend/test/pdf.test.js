@@ -51,3 +51,21 @@ test('long text is shrunk to fit instead of failing', async () => {
   submission.values.containerNumber = 'W'.repeat(20);
   await assert.doesNotReject(PdfFillerService.generate(form, validateSubmission(form, submission)));
 });
+
+const TINY_JPEG = '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';
+
+test('JPEG and typed signatures are drawn; unreadable images give a clear 400', async () => {
+  const form = listForms().find((f) => f.id === 'flatbed-6');
+  const withSignature = (signature) => {
+    const submission = sampleSubmission(form);
+    submission.values.inspectorSignature = signature;
+    return PdfFillerService.generate(form, validateSubmission(form, submission));
+  };
+
+  assertStrictPdfStructure(await withSignature({ type: 'image', data: TINY_JPEG }));
+  assertStrictPdfStructure(await withSignature({ type: 'typed', text: 'Nandu Peña' }));
+
+  // Has PNG magic bytes but is not a decodable PNG.
+  const brokenPng = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('garbage-garbage')]);
+  await assert.rejects(withSignature({ type: 'image', data: brokenPng.toString('base64') }), { statusCode: 400 });
+});

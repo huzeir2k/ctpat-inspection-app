@@ -6,15 +6,16 @@
 
 const Joi = require('joi');
 const { APIError } = require('../middleware/errorHandler');
+const { detectImageFormat } = require('../utils/imageFormat');
 
 // Printable Latin-1: the character set the PDF font (WinAnsi) can print.
 const PRINTABLE_LATIN1 = /^[\x20-\x7E\u00A0-\u00FF]+$/;
 const DATE_FORMAT = /^(0[1-9]|1[0-2])\/(0[1-9]|[12]\d|3[01])\/\d{4}$/;
 const TIME_FORMAT = /^([01]\d|2[0-3]):[0-5]\d$/;
-const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-// Base64 characters (not bytes) allowed per signature image.
-const MAX_SIGNATURE_LENGTH = 200000;
+// Base64 characters (not bytes) allowed per signature image (about 450 KB).
+const MAX_SIGNATURE_IMAGE_LENGTH = 600000;
+const MAX_TYPED_SIGNATURE_LENGTH = 40;
 
 const isRealDate = (value, helpers) => {
   const [month, day, year] = value.split('/').map(Number);
@@ -24,10 +25,25 @@ const isRealDate = (value, helpers) => {
   return valid ? value : helpers.error('any.invalid');
 };
 
-const isPng = (value, helpers) =>
-  Buffer.from(value.slice(0, 16), 'base64').subarray(0, 8).equals(PNG_MAGIC)
-    ? value
-    : helpers.error('any.invalid');
+const isPngOrJpeg = (value, helpers) => (detectImageFormat(value) ? value : helpers.error('any.invalid'));
+
+/**
+ * A signature is either an uploaded PNG/JPEG image or typed text:
+ *   { type: 'image', data: '<base64>' }   { type: 'typed', text: 'Jane Doe' }
+ */
+const signatureSchema = Joi.object({
+  type: Joi.string().valid('image', 'typed').required(),
+  data: Joi.string()
+    .base64({ paddingRequired: true })
+    .max(MAX_SIGNATURE_IMAGE_LENGTH)
+    .custom(isPngOrJpeg)
+    .when('type', { is: 'image', then: Joi.required(), otherwise: Joi.forbidden() }),
+  text: Joi.string()
+    .trim()
+    .max(MAX_TYPED_SIGNATURE_LENGTH)
+    .pattern(PRINTABLE_LATIN1)
+    .when('type', { is: 'typed', then: Joi.required(), otherwise: Joi.forbidden() }),
+});
 
 /** The Joi schema for one value, ignoring whether it is required. */
 const valueSchema = (field) => {
@@ -43,7 +59,7 @@ const valueSchema = (field) => {
     case 'choice':
       return Joi.string().valid(...field.options.map((o) => o.value));
     case 'signature':
-      return Joi.string().base64({ paddingRequired: true }).max(MAX_SIGNATURE_LENGTH).custom(isPng);
+      return signatureSchema;
     default:
       throw new Error(`Unsupported field type "${field.type}"`);
   }

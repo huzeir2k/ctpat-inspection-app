@@ -13,12 +13,15 @@
 const fs = require('fs/promises');
 const path = require('path');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+const { APIError } = require('../middleware/errorHandler');
+const { detectImageFormat } = require('../utils/imageFormat');
 
 const TEMPLATE_DIR = path.join(__dirname, '../../assets/forms');
 
 const INK = rgb(0, 0, 0);
 const TEXT_SIZE = 10;
 const MIN_TEXT_SIZE = 6;
+const TYPED_SIGNATURE_SIZE = 16;
 // Half-width and line thickness of the X drawn in each kind of box.
 const CHECKLIST_MARK = { halfSize: 2.2, thickness: 1 }; // small checklist boxes
 const SIGNOFF_MARK = { halfSize: 4, thickness: 1.2 }; // larger sign-off boxes
@@ -77,9 +80,26 @@ class PageWriter {
     this.page.drawText(value, { x, y: this.flipY(y), size, color: INK });
   }
 
-  /** Embeds a base64 PNG, scaled to fit the box while keeping its proportions. */
-  async drawSignature(base64Png, { x, y, width, height }) {
-    const image = await this.pdfDoc.embedPng(Buffer.from(base64Png, 'base64'));
+  /** Draws a signature: an embedded image, or typed text in an italic serif face. */
+  async drawSignature(signature, box) {
+    if (signature.type === 'typed') {
+      await this.drawTypedSignature(signature.text, box);
+    } else {
+      await this.drawSignatureImage(signature.data, box);
+    }
+  }
+
+  /** Embeds a PNG/JPEG, scaled to fit the box while keeping its proportions. */
+  async drawSignatureImage(base64, { x, y, width, height }) {
+    // A plain Uint8Array copy: small Buffers share a memory pool the PDF library cannot read correctly.
+    const bytes = new Uint8Array(Buffer.from(base64, 'base64'));
+    let image;
+    try {
+      image = detectImageFormat(base64) === 'jpeg' ? await this.pdfDoc.embedJpg(bytes) : await this.pdfDoc.embedPng(bytes);
+    } catch {
+      // e.g. an interlaced PNG, which the PDF library cannot embed
+      throw new APIError('A signature image could not be processed. Please use a standard PNG or JPEG.', 400);
+    }
     const scale = Math.min(width / image.width, height / image.height);
     this.page.drawImage(image, {
       x,
@@ -87,6 +107,15 @@ class PageWriter {
       width: image.width * scale,
       height: image.height * scale,
     });
+  }
+
+  async drawTypedSignature(text, { x, y, width }) {
+    this.signatureFont ??= await this.pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
+    let size = TYPED_SIGNATURE_SIZE;
+    while (size > MIN_TEXT_SIZE && this.signatureFont.widthOfTextAtSize(text, size) > width) {
+      size -= 0.5;
+    }
+    this.page.drawText(text, { x, y: this.flipY(y) + 1, size, font: this.signatureFont, color: INK });
   }
 }
 
@@ -143,7 +172,7 @@ class PdfFillerService {
         if (ring) writer.drawRing(ring);
         break;
       }
-      case 'image':
+      case 'signature':
         await writer.drawSignature(value, layout);
         break;
       default:

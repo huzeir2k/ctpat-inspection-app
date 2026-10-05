@@ -91,7 +91,11 @@ const sampleSubmission = (form, { optionIndex = 0 } = {}) => {
         values[field.key] = field.options[controllers.has(field.key) ? 0 : optionIndex].value;
         break;
       case 'signature':
-        values[field.key] = signature;
+        // Alternate between the two kinds so both are exercised.
+        values[field.key] =
+          optionIndex === 0 || field.key === 'sealVerifiedBySignature'
+            ? { type: 'image', data: signature }
+            : { type: 'typed', text: 'Nandu Peña' };
         break;
       default:
         throw new Error(`Unhandled field type ${field.type}`);

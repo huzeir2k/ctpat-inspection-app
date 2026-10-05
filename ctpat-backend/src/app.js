@@ -11,8 +11,8 @@ const { authMiddleware } = require('./middleware/auth');
 const { createRateLimiter } = require('./middleware/rateLimit');
 const { createInspectionRouter } = require('./routes/inspections');
 
-// Two signatures (<= 200 KB of base64 each) plus form answers fit comfortably.
-const JSON_BODY_LIMIT = '1mb';
+// Two signature images (<= 600 KB of base64 each) plus form answers fit comfortably.
+const JSON_BODY_LIMIT = '2mb';
 
 const createApp = ({ inspectionService }) => {
   const app = express();

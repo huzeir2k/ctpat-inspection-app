@@ -27,9 +27,9 @@ const checkOptions = (options) => ({ kind: 'checkOptions', options });
 /** An ellipse drawn around a printed word, e.g. Cross-Dock "Yes" / "No". */
 const circleOptions = (options) => ({ kind: 'circleOptions', options });
 
-/** A signature image whose bottom-left corner sits on a signature line. */
+/** A signature (image or typed text) whose bottom-left corner sits on a signature line. */
 const signatureOnLine = (x, rowBottom, width, height = 20) => ({
-  kind: 'image',
+  kind: 'signature',
   x,
   y: rowBottom - 2,
   width,

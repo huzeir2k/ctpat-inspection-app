@@ -84,20 +84,28 @@ test('dates and times must be real and correctly formatted', () => {
   }
 });
 
-test('signatures must be PNG images of limited size', () => {
+test('signatures may be PNG/JPEG images or typed text, and nothing else', () => {
   const form = getForm('flatbed-6');
+  const withSignature = (signature) => {
+    const body = fresh(form.id);
+    body.values.inspectorSignature = signature;
+    return body;
+  };
+  const accepted = (signature) => assert.doesNotThrow(() => validateSubmission(form, withSignature(signature)));
+  const rejected = (signature) => assert.ok(messagesOf(() => validateSubmission(form, withSignature(signature))), JSON.stringify(signature).slice(0, 60));
 
-  const notPng = fresh(form.id);
-  notPng.values.inspectorSignature = Buffer.from('<svg></svg> not a png at all').toString('base64');
-  assert.ok(messagesOf(() => validateSubmission(form, notPng)));
+  accepted({ type: 'image', data: sampleSignaturePng() });
+  accepted({ type: 'image', data: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 0x4a, 0x46, 0x49, 0x46, 0, 1]).toString('base64') });
+  accepted({ type: 'typed', text: 'Nandu Peña' });
 
-  const huge = fresh(form.id);
-  huge.values.inspectorSignature = 'A'.repeat(200004);
-  assert.ok(messagesOf(() => validateSubmission(form, huge)));
-
-  const fine = fresh(form.id);
-  fine.values.inspectorSignature = sampleSignaturePng();
-  assert.doesNotThrow(() => validateSubmission(form, fine));
+  rejected(sampleSignaturePng()); // a bare string is no longer a signature
+  rejected({ type: 'image', data: Buffer.from('<svg></svg> not an image at all').toString('base64') });
+  rejected({ type: 'image', data: 'A'.repeat(600004) });
+  rejected({ type: 'image', text: 'Jane' });
+  rejected({ type: 'typed', data: sampleSignaturePng() });
+  rejected({ type: 'typed', text: '😀' });
+  rejected({ type: 'typed', text: 'x'.repeat(41) });
+  rejected({ type: 'scribble', data: 'x' });
 });
 
 test('a template version mismatch asks the user to update the app', () => {

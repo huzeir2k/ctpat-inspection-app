@@ -20,7 +20,7 @@ const pointsOf = (entry) => {
   switch (entry.kind) {
     case 'text':
     case 'check':
-    case 'image':
+    case 'signature':
       return [[entry.x, entry.y]];
     case 'checkOptions':
       return Object.values(entry.options).map((p) => [p.x, p.y]);
