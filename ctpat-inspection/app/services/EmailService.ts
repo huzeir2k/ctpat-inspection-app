@@ -7,13 +7,15 @@ class EmailService {
    * Uses native mail composer on mobile, web fallback
    * @param pdfFilePath - The path to the PDF file
    * @param recipientEmail - The email address to send to
-   * @param truckNumber - Truck number for the subject line
+   * @param formLabel - Form type (e.g. "Flatbed 6-Point") for the subject line
+   * @param reference - Seal, truck or container number to identify the inspection
    * @param inspectorName - Inspector name for the email body
    */
   async sendInspectionReport(
     pdfFilePath: string,
     recipientEmail: string,
-    truckNumber: string,
+    formLabel: string,
+    reference: string,
     inspectorName: string
   ): Promise<void> {
     try {
@@ -32,11 +34,10 @@ class EmailService {
         throw new Error('Mail composer is not available on this device');
       }
 
-      const fileName = `CTPAT_Inspection_${truckNumber}_${Date.now()}.pdf`;
-      const subject = `CTPAT Inspection Report - Truck #${truckNumber}`;
+      const subject = `CTPAT Inspection Report - ${formLabel} - ${reference}`;
       const body = `Hello,
 
-Please find attached the CTPAT inspection report for truck #${truckNumber}.
+Please find attached the CTPAT inspection report for ${formLabel} (${reference}).
 
 This inspection was completed by: ${inspectorName}
 Date: ${new Date().toLocaleDateString()}

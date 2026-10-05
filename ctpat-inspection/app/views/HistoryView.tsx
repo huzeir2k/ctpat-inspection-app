@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
     Alert,
     ScrollView,
@@ -8,147 +8,101 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
+import { getFormById } from "../models/InspectionForm";
 import ApiService from "../services/ApiService";
-import StorageService, { SavedInspection } from "../services/StorageService";
+import PdfService from "../services/PdfService";
+import StorageService, { HistoryEntry } from "../services/StorageService";
 
 export default function HistoryView() {
   const router = useRouter();
-  const [inspections, setInspections] = useState<SavedInspection[]>([]);
+  const [inspections, setInspections] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ totalInspections: 0, thisMonth: 0, thisWeek: 0 });
-  const [useBackend, setUseBackend] = useState(true);
+  // False when the server could not be reached; the list then comes from this device.
+  const [isOnline, setIsOnline] = useState(true);
 
-  // Load inspections when view comes into focus
-  useFocusEffect(
-    React.useCallback(() => {
-      loadInspections();
-    }, [])
-  );
+  const loadFromServer = async () => {
+    const response = await ApiService.getInspections({ page: 1, limit: 50 });
+    if (!response.success) throw new Error(response.error?.message || "Could not load history");
 
-  const loadInspections = async () => {
-    try {
-      setLoading(true);
-      
-      // Try to load from backend first
-      if (useBackend && ApiService.isAuthenticated()) {
-        try {
-          console.log('📡 Loading from backend...');
-          const response = await ApiService.getInspections({
-            page: 1,
-            limit: 50,
-            sortOrder: 'desc',
-          });
+    setInspections(
+      response.data.inspections.map((item: any): HistoryEntry => ({
+        id: item.inspectionId,
+        formId: item.formId,
+        summaryId: item.summaryId,
+        printName: item.printName,
+        date: item.date,
+        time: item.time,
+        completedAt: item.createdAt,
+      }))
+    );
 
-          if (response.success) {
-            // Convert backend format to local format
-            const backendInspections = response.data.inspections.map((item: any) => ({
-              id: item.inspectionId,
-              inspectionPoints: item.inspectionPoints,
-              formData: {
-                truckNumber: item.truckNumber,
-                trailerNumber: item.trailerNumber,
-                sealNumber: item.sealNumber,
-                verifiedByName: item.verifiedByName,
-                verifiedBySignature: '',
-                securityCheckboxChecked: item.securityCheckboxChecked,
-                agriculturalPestCheckboxChecked: item.agriculturalPestCheckboxChecked,
-                date: item.date,
-                time: item.time,
-                printName: item.printName,
-                signature: '',
-                recipientEmail: item.recipientEmail,
-              },
-              completedAt: item.completedAt,
-              status: item.status,
-            }));
-
-            setInspections(backendInspections);
-            console.log(`✓ Loaded ${backendInspections.length} inspections from backend`);
-          } else {
-            throw new Error(response.error.message);
-          }
-
-          // Get stats from backend
-          const statsResponse = await ApiService.getStatistics();
-          if (statsResponse.success) {
-            setStats({
-              totalInspections: statsResponse.data.total,
-              thisMonth: statsResponse.data.thisMonth,
-              thisWeek: statsResponse.data.thisWeek,
-            });
-          }
-        } catch (backendError) {
-          console.warn('⚠️  Backend load failed, falling back to local storage:', backendError);
-          setUseBackend(false);
-          await loadLocalInspections();
-        }
-      } else {
-        await loadLocalInspections();
-      }
-    } catch (error) {
-      console.error("Error loading inspections:", error);
-      Alert.alert("Error", "Failed to load inspection history");
-    } finally {
-      setLoading(false);
+    const statsResponse = await ApiService.getStatistics();
+    if (statsResponse.success) {
+      setStats({
+        totalInspections: statsResponse.data.total,
+        thisMonth: statsResponse.data.thisMonth,
+        thisWeek: statsResponse.data.thisWeek,
+      });
     }
   };
 
-  const loadLocalInspections = async () => {
-    const history = await StorageService.getInspectionHistory();
-    const inspectionStats = await StorageService.getInspectionStats();
-    setInspections(history.reverse()); // Show newest first
-    setStats(inspectionStats);
-    console.log('✓ Loaded from local storage');
+  const loadFromDevice = async () => {
+    setInspections(await StorageService.getInspectionHistory());
+    setStats(await StorageService.getInspectionStats());
+  };
+
+  const loadInspections = useCallback(async () => {
+    setLoading(true);
+    try {
+      if (!ApiService.isAuthenticated()) throw new Error("Not signed in");
+      await loadFromServer();
+      setIsOnline(true);
+    } catch (error) {
+      console.warn("Server history unavailable, using this device's history:", error);
+      setIsOnline(false);
+      await loadFromDevice();
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadInspections();
+    }, [loadInspections])
+  );
+
+  const handleViewPdf = async (id: string) => {
+    try {
+      await PdfService.openInspectionPdf(id);
+    } catch (error: any) {
+      Alert.alert("Could not open PDF", error.message || "Please try again.");
+    }
   };
 
   const handleDeleteInspection = (id: string) => {
     Alert.alert(
       "Delete Inspection",
-      "Are you sure you want to delete this inspection?",
+      "This permanently deletes the inspection and its PDF. Continue?",
       [
-        { text: "Cancel", onPress: () => {} },
+        { text: "Cancel", style: "cancel" },
         {
           text: "Delete",
+          style: "destructive",
           onPress: async () => {
             try {
-              if (useBackend) {
-                await ApiService.deleteInspection(id);
-              } else {
-                await StorageService.deleteInspection(id);
-              }
+              const response = await ApiService.deleteInspection(id);
+              if (!response.success) throw new Error(response.error?.message || "Delete failed");
+              await StorageService.deleteInspection(id);
               loadInspections();
-              Alert.alert("Success", "Inspection deleted");
-            } catch (error) {
-              Alert.alert("Error", "Failed to delete inspection");
+            } catch (error: any) {
+              Alert.alert("Error", error.message || "Failed to delete inspection");
             }
           },
         },
       ]
     );
-  };
-
-  const handleExport = async () => {
-    try {
-      const json = useBackend 
-        ? JSON.stringify(inspections, null, 2)
-        : await StorageService.exportHistory();
-      Alert.alert(
-        "Export Complete",
-        "Inspection history exported:\n\n" + json.substring(0, 200) + "..."
-      );
-    } catch (error) {
-      Alert.alert("Error", "Failed to export history");
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
-  };
-
-  const getCompletionPercentage = (inspection: SavedInspection) => {
-    const completed = inspection.inspectionPoints.filter((p) => p.checked).length;
-    const total = inspection.inspectionPoints.length;
-    return Math.round((completed / total) * 100);
   };
 
   return (
@@ -176,10 +130,8 @@ export default function HistoryView() {
         </View>
       </View>
 
-      {inspections.length > 0 && (
-        <TouchableOpacity style={styles.exportButton} onPress={handleExport}>
-          <Text style={styles.exportButtonText}>📊 Export History</Text>
-        </TouchableOpacity>
+      {!isOnline && (
+        <Text style={styles.emptyText}>Offline: showing inspections saved on this device.</Text>
       )}
 
       <ScrollView style={styles.listContainer}>
@@ -193,40 +145,31 @@ export default function HistoryView() {
               <View style={styles.cardHeader}>
                 <View>
                   <Text style={styles.cardTitle}>
-                    Truck: {inspection.formData.truckNumber}
+                    {getFormById(inspection.formId)?.label ?? inspection.formId}
                   </Text>
-                  <Text style={styles.cardSubtitle}>
-                    Trailer: {inspection.formData.trailerNumber}
-                  </Text>
+                  <Text style={styles.cardSubtitle}>{inspection.summaryId}</Text>
                 </View>
-                <Text
-                  style={[
-                    styles.completionBadge,
-                    { backgroundColor: getCompletionPercentage(inspection) === 100 ? "#4CAF50" : "#FFC107" },
-                  ]}
-                >
-                  {getCompletionPercentage(inspection)}%
-                </Text>
               </View>
 
               <View style={styles.cardContent}>
                 <View style={styles.detailRow}>
                   <Text style={styles.label}>Date:</Text>
-                  <Text style={styles.value}>{inspection.formData.date}</Text>
+                  <Text style={styles.value}>{inspection.date}</Text>
                 </View>
                 <View style={styles.detailRow}>
                   <Text style={styles.label}>Inspector:</Text>
-                  <Text style={styles.value}>{inspection.formData.printName}</Text>
+                  <Text style={styles.value}>{inspection.printName}</Text>
                 </View>
                 <View style={styles.detailRow}>
-                  <Text style={styles.label}>Completed:</Text>
-                  <Text style={styles.value}>
-                    {formatDate(inspection.completedAt || inspection.savedAt)}
-                  </Text>
+                  <Text style={styles.label}>Submitted:</Text>
+                  <Text style={styles.value}>{new Date(inspection.completedAt).toLocaleString()}</Text>
                 </View>
               </View>
 
               <View style={styles.cardActions}>
+                <TouchableOpacity style={styles.viewButton} onPress={() => handleViewPdf(inspection.id)}>
+                  <Text style={styles.deleteButtonText}>View PDF</Text>
+                </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.deleteButton}
                   onPress={() => handleDeleteInspection(inspection.id)}
@@ -296,19 +239,6 @@ const styles = StyleSheet.create({
     color: "#666",
     marginTop: 5,
   },
-  exportButton: {
-    marginHorizontal: 15,
-    paddingVertical: 12,
-    paddingHorizontal: 15,
-    backgroundColor: "#4CAF50",
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  exportButtonText: {
-    color: "white",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
   listContainer: {
     flex: 1,
     paddingHorizontal: 15,
@@ -357,14 +287,6 @@ const styles = StyleSheet.create({
     color: "#666",
     marginTop: 4,
   },
-  completionBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    color: "white",
-    fontWeight: "bold",
-    overflow: "hidden",
-  },
   cardContent: {
     paddingHorizontal: 15,
     paddingVertical: 12,
@@ -389,6 +311,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingBottom: 12,
     gap: 8,
+  },
+  viewButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#2196F3",
+    borderRadius: 6,
   },
   deleteButton: {
     paddingHorizontal: 12,

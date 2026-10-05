@@ -99,7 +99,8 @@ export default function SignatureCapture({ onSignatureSaved }: SignatureCaptureP
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [3, 1],
-        quality: 1,
+        // Lower quality keeps the picture small enough for the server's size limit
+        quality: 0.5,
         base64: true,
       });
 
