@@ -4,9 +4,10 @@
  */
 
 class APIError extends Error {
-  constructor(message, statusCode = 500) {
+  constructor(message, statusCode = 500, details = undefined) {
     super(message);
     this.statusCode = statusCode;
+    this.details = details;
     this.name = 'APIError';
   }
 }
@@ -35,6 +36,7 @@ const errorHandler = (err, req, res, next) => {
     error: {
       message,
       statusCode,
+      ...(err.details && { details: err.details }),
       ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
     },
   });
