@@ -63,10 +63,15 @@ class PdfService {
 
       // Call backend to generate PDF
       console.log('📤 Requesting PDF generation from backend...');
+      const token = ApiService.getToken();
+      if (!token) {
+        throw new Error('Not authenticated. Please sign in again.');
+      }
       const response = await fetch(`${ApiService.getBaseUrl()}/api/inspections/generate-pdf`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
       });
@@ -111,16 +116,6 @@ class PdfService {
       console.error('Error generating PDF:', error);
       throw error;
     }
-  }
-
-  /**
-   * Get bearer token from auth service
-   * (You'll need to implement this based on your auth setup)
-   */
-  private getBearerToken(): string {
-    // For now, return empty - the route is public for testing
-    // In production, get this from AuthService
-    return '';
   }
 }
 

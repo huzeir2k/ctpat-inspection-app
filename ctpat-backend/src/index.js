@@ -24,7 +24,7 @@ const app = express();
 
 // Validate production configuration
 if (process.env.NODE_ENV === 'production') {
-  const requiredEnvVars = ['MONGODB_URI', 'SUPABASE_URL', 'SUPABASE_ANON_KEY'];
+  const requiredEnvVars = ['MONGODB_URI', 'SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_JWT_SECRET'];
   const missing = requiredEnvVars.filter(v => !process.env[v]);
   
   if (missing.length > 0) {
@@ -99,26 +99,8 @@ app.get('/health', (req, res) => {
 // Protected Routes (auth required)
 // ====================
 
-// Routes that don't require authentication (for testing/preview)
-const publicApiPaths = [
-  '/api/inspections/generate-pdf',
-  '/api/inspections/download-pdf',
-];
-
-// Check if path is public
-const isPublicPath = (req) => {
-  return publicApiPaths.some(path => 
-    req.path === path || req.path.startsWith(path + '/')
-  );
-};
-
-// Apply authentication to /api routes (except public ones)
-app.use('/api', (req, res, next) => {
-  if (isPublicPath(req)) {
-    return next();
-  }
-  authMiddleware(req, res, next);
-});
+// All /api routes require a valid Supabase-issued Bearer token.
+app.use('/api', authMiddleware);
 
 // Apply stricter rate limit to inspection creation
 app.post('/api/inspections', authLimiter);

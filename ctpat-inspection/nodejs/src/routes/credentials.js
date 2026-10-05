@@ -25,15 +25,15 @@ router.get('/config', (req, res) => {
       return res.json({
         success: true,
         credentials: {
-          jwtSecret: process.env.JWT_SECRET || 'no-secret-set',
           smtpConfig: null,
         },
       });
     }
 
+    // Never echo the JWT secret back over the API — only expose SMTP config.
     res.json({
       success: true,
-      credentials: storedCredentials,
+      credentials: { smtpConfig: storedCredentials.smtpConfig || null },
     });
   } catch (error) {
     console.error('Error retrieving credentials:', error);
@@ -54,21 +54,10 @@ router.get('/config', (req, res) => {
  */
 router.post('/store', express.json(), (req, res) => {
   try {
-    const { jwtSecret, smtpConfig } = req.body;
-
-    if (!jwtSecret) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          message: 'JWT Secret is required',
-          statusCode: 400,
-        },
-      });
-    }
+    const { smtpConfig } = req.body;
 
     // Store in memory
     storedCredentials = {
-      jwtSecret,
       smtpConfig,
     };
 
@@ -99,40 +88,6 @@ router.post('/store', express.json(), (req, res) => {
       success: false,
       error: {
         message: 'Failed to store credentials',
-        statusCode: 500,
-      },
-    });
-  }
-});
-
-/**
- * GET /api/credentials/jwt-secret
- * Get JWT secret for token signing
- */
-router.get('/jwt-secret', (req, res) => {
-  try {
-    const secret = storedCredentials?.jwtSecret || process.env.JWT_SECRET;
-    
-    if (!secret) {
-      return res.status(500).json({
-        success: false,
-        error: {
-          message: 'JWT Secret not configured',
-          statusCode: 500,
-        },
-      });
-    }
-
-    res.json({
-      success: true,
-      secret,
-    });
-  } catch (error) {
-    console.error('Error retrieving JWT secret:', error);
-    res.status(500).json({
-      success: false,
-      error: {
-        message: 'Failed to retrieve JWT secret',
         statusCode: 500,
       },
     });
