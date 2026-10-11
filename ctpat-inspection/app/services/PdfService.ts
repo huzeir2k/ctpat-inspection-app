@@ -1,128 +1,80 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import { InspectionForm, InspectionPoint } from "../models/InspectionChecklist";
-import { StoredSignature } from "./SignatureService";
-import ApiService from './ApiService';
+import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
-
-export interface PdfGenerationData {
-  inspectionPoints: InspectionPoint[];
-  formData: InspectionForm;
-  inspectorSignature?: StoredSignature | null;
-  verifiedBySignature?: StoredSignature | null;
-}
+import ApiService from './ApiService';
 
 /**
- * PDF Service - generates inspection reports
- * Communicates with backend to fill CTPAT form with inspection data
+ * PDF Service - gets filled CTPAT PDFs from the backend and hands them to the user.
+ * The backend fills the form template; this service only moves the bytes around.
  */
+
+// Converts in chunks so large PDFs do not overflow the call stack.
+const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+  const bytes = new Uint8Array(buffer);
+  const CHUNK_SIZE = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK_SIZE));
+  }
+  return btoa(binary);
+};
+
 class PdfService {
   /**
-   * Generate timestamped filename format: CTPAT_HH:MM_DD/MM/YYYY
+   * Render a PDF from the data entered so far (nothing is saved on the server)
+   * and open it.
    */
-  private generateTimestampedFilename(): string {
-    const now = new Date();
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const year = now.getFullYear();
-    return `CTPAT_${hours}:${minutes}_${day}/${month}/${year}.pdf`;
+  async previewDraft(submission: object): Promise<void> {
+    const pdf = await ApiService.previewPdf(submission);
+    await this.deliver(pdf, `CTPAT_preview_${Date.now()}.pdf`);
   }
 
   /**
-   * Generate filled CTPAT PDF from backend
-   * Sends inspection data to backend which fills the form and returns PDF
+   * Download the stored PDF of a submitted inspection and open it.
+   * @returns the local file path (empty on web, where the browser handles the download)
    */
-  async generatePdfFromTemplate(data: PdfGenerationData): Promise<string> {
-    try {
-      const { formData, inspectionPoints, inspectorSignature, verifiedBySignature } = data;
+  async openInspectionPdf(inspectionId: string): Promise<string> {
+    const pdf = await ApiService.getInspectionPdf(inspectionId);
+    return this.deliver(pdf, `CTPAT_${inspectionId.slice(0, 8)}.pdf`);
+  }
 
-      // Prepare payload for backend
-      const payload = {
-        inspectionData: {
-          truckNumber: formData.truckNumber,
-          trailerNumber: formData.trailerNumber,
-          sealNumber: formData.sealNumber,
-          date: formData.date,
-          time: formData.time,
-          printName: formData.printName,
-          verifiedByName: formData.verifiedByName,
-          securityCheckboxChecked: formData.securityCheckboxChecked,
-          agriculturalPestCheckboxChecked: formData.agriculturalPestCheckboxChecked,
-          notes: formData.notes || '',
-          verifiedBySignature: verifiedBySignature || undefined,
-          inspectorSignature: inspectorSignature || undefined,
-        },
-        inspectionPoints: inspectionPoints.map(point => ({
-          id: point.id,
-          title: point.title,
-          description: point.description,
-          checked: point.checked,
-        })),
-      };
+  /**
+   * Download the stored PDF of a submitted inspection without opening it.
+   * Used to attach it to an email from the device's mail app.
+   */
+  async downloadInspectionPdf(inspectionId: string): Promise<string> {
+    const pdf = await ApiService.getInspectionPdf(inspectionId);
+    return this.save(pdf, `CTPAT_${inspectionId.slice(0, 8)}.pdf`);
+  }
 
-      // Call backend to generate PDF
-      console.log('📤 Requesting PDF generation from backend...');
-      const response = await fetch(`${ApiService.getBaseUrl()}/api/inspections/generate-pdf`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Backend error (${response.status}): ${errorText}`);
-      }
-
-      // Get PDF content as text
-      const pdfContent = await response.text();
-
-      // Platform-specific handling
-      if (Platform.OS === 'web') {
-        // Web: Use Blob and download
-        const blob = new Blob([pdfContent], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        const filename = `inspection_${Date.now()}.pdf`;
-        
-        // Create download link
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        
-        return filename;
-      } else {
-        // Native (iOS/Android): Use FileSystem
-        const filename = `inspection_${Date.now()}.pdf`;
-        const filePath = `${FileSystem.documentDirectory}${filename}`;
-
-        await FileSystem.writeAsStringAsync(filePath, pdfContent, {
-          encoding: FileSystem.EncodingType.UTF8,
-        });
-
-        return filePath;
-      }
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      throw error;
+  private async deliver(pdf: ArrayBuffer, fileName: string): Promise<string> {
+    const path = await this.save(pdf, fileName);
+    if (Platform.OS !== 'web' && (await Sharing.isAvailableAsync())) {
+      await Sharing.shareAsync(path, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' });
     }
+    return path;
   }
 
-  /**
-   * Get bearer token from auth service
-   * (You'll need to implement this based on your auth setup)
-   */
-  private getBearerToken(): string {
-    // For now, return empty - the route is public for testing
-    // In production, get this from AuthService
-    return '';
+  private async save(pdf: ArrayBuffer, fileName: string): Promise<string> {
+    if (Platform.OS === 'web') {
+      const url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      return '';
+    }
+
+    // The cache directory is cleared by the OS; reports contain personal details.
+    const path = `${FileSystem.cacheDirectory}${fileName}`;
+    await FileSystem.writeAsStringAsync(path, arrayBufferToBase64(pdf), {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    return path;
   }
 }
 
 export default new PdfService();
-

@@ -95,7 +95,7 @@ export default function HomeView() {
           style={styles.button}
           onPress={() => router.push("./inspection")}
         >
-          <Text style={styles.buttonText}>Inspect Truck and Trailer</Text>
+          <Text style={styles.buttonText}>Start Inspection</Text>
         </TouchableOpacity>
 
         <TouchableOpacity

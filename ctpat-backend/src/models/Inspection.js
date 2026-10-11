@@ -2,227 +2,65 @@ const mongoose = require('mongoose');
 const { v4: uuidv4 } = require('uuid');
 
 /**
- * Inspection Point Schema
- * Represents a single checklist item in the inspection
+ * One submitted CTPAT inspection of any form type.
+ *
+ * What was inspected is described by `formId` + `templateVersion` (see
+ * src/forms). The checklist keeps a snapshot of the labels so a record stays
+ * readable even if a form definition changes later.
  */
-const inspectionPointSchema = new mongoose.Schema({
-  id: {
-    type: Number,
-    required: true,
-  },
-  title: {
-    type: String,
-    required: true,
-  },
-  description: {
-    type: String,
-    required: true,
-  },
-  checked: {
-    type: Boolean,
-    default: false,
-  },
-});
-
-/**
- * Inspection Schema
- * Represents a complete inspection submission
- */
-const inspectionSchema = new mongoose.Schema(
+const checklistItemSchema = new mongoose.Schema(
   {
-    inspectionId: {
-      type: String,
-      default: uuidv4,
-      unique: true,
-      index: true,
-    },
-    // Vehicle Information
-    truckNumber: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    trailerNumber: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    sealNumber: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    // Inspection Points
-    inspectionPoints: [inspectionPointSchema],
-
-    // Verification Information
-    verifiedByName: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    verifiedBySignatureId: {
-      type: String,
-      default: null,
-    },
-
-    // Compliance Checks
-    securityCheckboxChecked: {
-      type: Boolean,
-      default: false,
-    },
-    agriculturalPestCheckboxChecked: {
-      type: Boolean,
-      default: false,
-    },
-
-    // Date & Time
-    date: {
-      type: String,
-      required: true,
-    },
-    time: {
-      type: String,
-      required: true,
-    },
-
-    // Inspector Information
-    printName: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    inspectorSignatureId: {
-      type: String,
-      default: null,
-    },
-
-    // PDF Information
-    pdfStoragePath: {
-      type: String,
-      default: null,
-    },
-    pdfPublicUrl: {
-      type: String,
-      default: null,
-    },
-
-    // Metadata
-    completedAt: {
-      type: Date,
-      default: Date.now,
-      index: true,
-    },
-    recipientEmail: {
-      type: String,
-      trim: true,
-      lowercase: true,
-    },
-    status: {
-      type: String,
-      enum: ['draft', 'submitted', 'archived'],
-      default: 'submitted',
-      index: true,
-    },
-    notes: {
-      type: String,
-      default: '',
-    },
-    // Audit trail for compliance and debugging
-    auditLog: [
-      {
-        action: {
-          type: String,
-          enum: ['created', 'modified', 'status_changed', 'pdf_updated', 'archived'],
-        },
-        timestamp: {
-          type: Date,
-          default: Date.now,
-        },
-        status: String,
-        modifiedBy: String,
-        details: String,
-      },
-    ],
-    // Idempotency key to prevent duplicate submissions
-    idempotencyKey: {
-      type: String,
-      unique: true,
-      sparse: true,
-    },
+    id: { type: String, required: true },
+    label: { type: String, required: true },
+    checked: { type: Boolean, required: true },
   },
-  {
-    timestamps: true,
-  }
+  { _id: false }
 );
 
-// Index for efficient queries
-inspectionSchema.index({ truckNumber: 1, createdAt: -1 });
-inspectionSchema.index({ completedAt: -1 });
-inspectionSchema.index({ status: 1, createdAt: -1 });
-inspectionSchema.index({ recipientEmail: 1, status: 1 });
-inspectionSchema.index({ idempotencyKey: 1 }, { sparse: true });
+const auditEntrySchema = new mongoose.Schema(
+  {
+    action: { type: String, enum: ['created', 'emailed'], required: true },
+    at: { type: Date, default: Date.now },
+    details: { type: String },
+  },
+  { _id: false }
+);
 
-// Virtual for completion percentage
-inspectionSchema.virtual('completionPercentage').get(function () {
-  if (this.inspectionPoints.length === 0) return 0;
-  const checked = this.inspectionPoints.filter((p) => p.checked).length;
-  return Math.round((checked / this.inspectionPoints.length) * 100);
-});
+const inspectionSchema = new mongoose.Schema(
+  {
+    inspectionId: { type: String, default: uuidv4, unique: true },
 
-// Ensure virtuals are included in JSON
-inspectionSchema.set('toJSON', { virtuals: true });
+    // Supabase user id (JWT `sub`). Every query must filter on it.
+    createdBy: { type: String, required: true },
 
-/**
- * Pre-save middleware to validate inspection data and status transitions
- */
-inspectionSchema.pre('save', function (next) {
-  const now = new Date();
-  
-  // Validate that at least some inspection points are checked
-  if (this.inspectionPoints && this.inspectionPoints.length === 0) {
-    console.warn('Warning: Saving inspection with no checklist items');
-  }
+    formId: { type: String, required: true },
+    templateVersion: { type: Number, required: true },
 
-  // Validate status transitions
-  if (this.isModified('status')) {
-    const validTransitions = {
-      draft: ['submitted', 'archived'],
-      submitted: ['archived'],
-      archived: [], // Cannot transition from archived
-    };
+    // The number that identifies this record in lists (container / truck / seal number).
+    summaryId: { type: String, required: true },
 
-    // Get previous status from database
-    // Note: For new documents, _id doesn't exist yet, so skip validation
-    if (this._id) {
-      const currentStatus = this.status;
-      
-      // This is a simplified check - in production, query the DB for the previous state
-      // For now, we rely on the route handlers to enforce this
-    }
-  }
+    checklist: { type: [checklistItemSchema], required: true },
 
-  // Set completedAt timestamp when submitted
-  if (this.status === 'submitted' && !this.completedAt) {
-    this.completedAt = now;
-  }
+    // Text, date, time, checkbox and choice answers. Signatures are kept apart.
+    values: { type: mongoose.Schema.Types.Mixed, required: true },
 
-  // Add audit timestamp
-  if (!this.auditLog) {
-    this.auditLog = [];
-  }
+    // Base64 PNGs by field key. Never returned unless explicitly selected.
+    signatures: { type: mongoose.Schema.Types.Mixed, select: false },
 
-  this.auditLog.push({
-    action: this.isNew ? 'created' : 'modified',
-    timestamp: now,
-    status: this.status,
-  });
+    pdfStoragePath: { type: String, required: true },
 
-  next();
-});
+    idempotencyKey: { type: String },
+    auditLog: { type: [auditEntrySchema], default: [] },
+  },
+  { timestamps: true }
+);
 
-// Create model
-const Inspection = mongoose.model('Inspection', inspectionSchema);
+inspectionSchema.index({ createdBy: 1, createdAt: -1 });
+inspectionSchema.index({ createdBy: 1, formId: 1, createdAt: -1 });
+// A client-chosen key only has to be unique among that user's own submissions.
+inspectionSchema.index(
+  { createdBy: 1, idempotencyKey: 1 },
+  { unique: true, partialFilterExpression: { idempotencyKey: { $type: 'string' } } }
+);
 
-module.exports = Inspection;
+module.exports = mongoose.model('Inspection', inspectionSchema);

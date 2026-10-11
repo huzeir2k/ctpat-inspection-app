@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import ApiService from "../services/ApiService";
-import AuthService from "../services/AuthService";
+import SupabaseAuthService from "../services/SupabaseAuthService";
 
 interface SettingsData {
   appVersion: string;
@@ -42,8 +42,7 @@ export default function SettingsView() {
   const [isSaving, setIsSaving] = useState(false);
   const [editingEmail, setEditingEmail] = useState(false);
   const [backendStatus, setBackendStatus] = useState<'healthy' | 'offline'>('offline');
-  const [apiToken, setApiToken] = useState('');
-  const [userInfo, setUserInfo] = useState<any>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
 
   // Load settings from AsyncStorage on mount
   useFocusEffect(
@@ -67,15 +66,24 @@ export default function SettingsView() {
 
   const loadAuthInfo = async () => {
     try {
-      const token = await AuthService.getStoredToken();
-      if (token) {
-        setApiToken(AuthService.maskToken());
-      }
-      const user = await AuthService.getUserInfo();
-      setUserInfo(user);
+      const session = await SupabaseAuthService.getSession();
+      setUserEmail(session?.user?.email ?? null);
     } catch (error) {
       console.error("Error loading auth info:", error);
     }
+  };
+
+  const handleSignOut = () => {
+    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+      { text: "Cancel", onPress: () => {} },
+      {
+        text: "Sign Out",
+        onPress: async () => {
+          await SupabaseAuthService.signOut();
+          router.replace("/login");
+        },
+      },
+    ]);
   };
 
   const checkBackendStatus = async () => {
@@ -172,7 +180,7 @@ export default function SettingsView() {
           onPress: async () => {
             try {
               await AsyncStorage.clear();
-              await AuthService.clearToken();
+              await SupabaseAuthService.signOut();
               Alert.alert("Success", "App data cleared. Please restart the app.");
               router.push("../");
             } catch (error) {
@@ -243,17 +251,13 @@ export default function SettingsView() {
             </View>
           </View>
 
-          {apiToken && (
-            <View style={styles.tokenSection}>
-              <Text style={styles.tokenLabel}>API Token</Text>
-              <Text style={styles.tokenValue}>{apiToken}</Text>
-            </View>
-          )}
-
-          {userInfo && (
+          {userEmail && (
             <View style={styles.userSection}>
-              <Text style={styles.userLabel}>User: {userInfo.name}</Text>
-              <Text style={styles.userEmail}>{userInfo.email}</Text>
+              <Text style={styles.userLabel}>Signed in as</Text>
+              <Text style={styles.userEmail}>{userEmail}</Text>
+              <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
+                <Text style={styles.signOutButtonText}>Sign Out</Text>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -580,23 +584,6 @@ const styles = StyleSheet.create({
     color: '#999',
     marginTop: 2,
   },
-  tokenSection: {
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    backgroundColor: '#f9f9f9',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  tokenLabel: {
-    fontSize: 12,
-    color: '#999',
-    marginBottom: 4,
-  },
-  tokenValue: {
-    fontSize: 12,
-    color: '#666',
-    fontFamily: 'monospace',
-  },
   userSection: {
     paddingHorizontal: 15,
     paddingVertical: 12,
@@ -613,6 +600,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     marginTop: 2,
+  },
+  signOutButton: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    backgroundColor: '#ffe5e5',
+  },
+  signOutButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#cc3333',
   },
   testButton: {
     marginHorizontal: 15,

@@ -26,11 +26,12 @@ const PORT = 3000;
 // Configuration
 // ====================
 
-// Validate JWT secret is available
-if (!process.env.JWT_SECRET) {
-  console.warn('⚠️  JWT_SECRET not provided - using fallback. Set via environment variables for production use.');
-  // Fallback JWT secret (should be set by SecureCredentialsService from frontend)
-  process.env.JWT_SECRET = process.env.JWT_SECRET || 'fallback-dev-secret-' + Date.now();
+// Validate the Supabase JWT secret is available (used by authMiddleware to verify tokens)
+if (!process.env.SUPABASE_JWT_SECRET) {
+  console.error(
+    '❌ SUPABASE_JWT_SECRET not provided - all authenticated requests will be rejected. ' +
+    'Set it from Supabase Dashboard > Settings > API > JWT Settings.'
+  );
 }
 
 // SMTP configuration from environment (set by frontend SecureCredentialsService)
@@ -86,17 +87,12 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Credentials routes (no auth required, for internal config)
+// All /api routes require a valid Supabase-issued Bearer token.
+app.use('/api', authMiddleware);
+
 app.use('/api/credentials', credentialsRoutes);
-
-// PDF routes (no auth required)
 app.use('/api/pdfs', pdfRoutes);
-
-// Email routes (no auth required for now, can add auth later)
 app.use('/api/emails', emailRoutes);
-
-// Auth middleware for protected routes
-app.use(authMiddleware);
 
 // Inspection routes
 app.use('/api/inspections', inspectionRoutes);

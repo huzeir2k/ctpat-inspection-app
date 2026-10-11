@@ -1,24 +1,23 @@
 /**
  * JWT Authentication Middleware
- * Validates Bearer tokens and extracts user information
+ * Verifies Supabase Auth-issued access tokens (HS256, shared JWT secret) and
+ * extracts the authenticated user's id (`sub` claim) onto req.user.
  */
 
+const jwt = require('jsonwebtoken');
 const { APIError } = require('./errorHandler');
 
-/**
- * Verify JWT token and extract user information
- * For now, uses a simple token validation strategy
- * In production, integrate with Auth0, Firebase, or similar
- */
+const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET;
+
+if (!SUPABASE_JWT_SECRET) {
+  console.error(
+    '❌ SUPABASE_JWT_SECRET is not set. All authenticated requests will be rejected. ' +
+    'Set it from Supabase Dashboard > Settings > API > JWT Settings.'
+  );
+}
+
 const authMiddleware = (req, res, next) => {
   try {
-    // Skip auth for PDF endpoints (development convenience)
-    const pdfPaths = ['/inspections/generate-pdf', '/inspections/download-pdf'];
-    if (pdfPaths.includes(req.path) && req.method === 'POST') {
-      req.user = { id: 'dev-user', token: 'dev-token' };
-      return next();
-    }
-
     const authHeader = req.headers.authorization;
 
     if (!authHeader) {
@@ -32,15 +31,25 @@ const authMiddleware = (req, res, next) => {
 
     const token = parts[1];
 
-    // Validate token format (UUID or JWT-like)
-    if (!isValidToken(token)) {
-      throw new APIError('Invalid token format', 401);
+    if (!SUPABASE_JWT_SECRET) {
+      throw new APIError('Server authentication is not configured', 500);
     }
 
-    // Attach user info to request (in production, decode JWT)
+    let payload;
+    try {
+      payload = jwt.verify(token, SUPABASE_JWT_SECRET, { algorithms: ['HS256'] });
+    } catch (verifyError) {
+      throw new APIError('Invalid or expired token', 401);
+    }
+
+    if (!payload.sub) {
+      throw new APIError('Token is missing the subject (user id) claim', 401);
+    }
+
     req.user = {
-      id: extractUserIdFromToken(token),
-      token: token,
+      id: payload.sub,
+      email: payload.email,
+      role: payload.role,
     };
 
     next();
@@ -62,7 +71,6 @@ const requireRole = (allowedRoles) => {
       return next(new APIError('User not authenticated', 401));
     }
 
-    // In production, extract role from JWT
     const userRole = req.user.role || 'inspector'; // Default role
 
     if (!allowedRoles.includes(userRole)) {
@@ -92,49 +100,6 @@ const verifyOwnership = (ownershipField = 'printName') => {
     // For now, just verify user exists
     next();
   };
-};
-
-/**
- * Simple token validation
- * Accepts UUID v4 format or JWT-like strings
- */
-const isValidToken = (token) => {
-  // UUID v4 pattern
-  const uuidPattern =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-  // JWT pattern (3 parts separated by dots)
-  const jwtPattern = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*$/;
-
-  return uuidPattern.test(token) || jwtPattern.test(token);
-};
-
-/**
- * Extract user ID from token (simple implementation)
- * In production, decode JWT properly using jsonwebtoken library
- */
-const extractUserIdFromToken = (token) => {
-  // If UUID, use as ID
-  if (
-    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      token
-    )
-  ) {
-    return token;
-  }
-
-  // If JWT, extract from payload (without verification - done in production)
-  try {
-    const parts = token.split('.');
-    if (parts.length === 3) {
-      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
-      return payload.sub || payload.id || payload.user_id || 'unknown';
-    }
-  } catch (error) {
-    // Silently fail, will be caught by isValidToken
-  }
-
-  return 'unknown';
 };
 
 module.exports = {

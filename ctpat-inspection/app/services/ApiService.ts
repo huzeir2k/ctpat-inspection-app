@@ -3,8 +3,6 @@
  * Handles all communication with the CTPAT inspection backend
  */
 
-import * as FileSystem from 'expo-file-system';
-
 export interface ApiErrorResponse {
   success: false;
   error: {
@@ -189,58 +187,26 @@ class ApiService {
   }
 
   /**
-   * Create inspection with PDF upload
+   * Submit a completed inspection. The server validates it, builds the PDF and stores both.
+   * Reusing the same idempotency key makes retries safe (no duplicate records).
    */
-  async createInspection(
-    inspectionData: any,
-    pdfPath?: string
-  ): Promise<ApiResponse<any>> {
-    const payload: any = {
-      ...inspectionData,
-    };
-
-    // Read and attach PDF if path provided
-    if (pdfPath) {
-      try {
-        const fileInfo = await FileSystem.getInfoAsync(pdfPath);
-        if (!fileInfo.exists) {
-          console.warn('PDF file not found:', pdfPath);
-        } else {
-          const base64Pdf = await FileSystem.readAsStringAsync(pdfPath, {
-            encoding: 'base64',
-          });
-          payload.pdfData = base64Pdf;
-          payload.pdfFileName = `CTPAT_${Date.now()}.pdf`;
-          console.log('✓ PDF attached to request');
-        }
-      } catch (error) {
-        console.warn('Could not read PDF file:', error);
-        // Continue without PDF
-      }
-    }
-
-    return this.request('POST', '/api/inspections', payload, {
-      idempotencyKey: inspectionData.idempotencyKey,
-    });
+  async createInspection(submission: object, idempotencyKey: string): Promise<ApiResponse<any>> {
+    return this.request('POST', '/api/inspections', submission, { idempotencyKey });
   }
 
   /**
-   * Get all inspections with filters
+   * List the signed-in user's inspections, newest first
    */
   async getInspections(filters?: {
     page?: number;
     limit?: number;
-    status?: 'draft' | 'submitted' | 'archived';
-    sortBy?: 'createdAt' | 'completedAt' | 'truckNumber';
-    sortOrder?: 'asc' | 'desc';
+    formId?: string;
   }): Promise<ApiResponse<any>> {
     const params = new URLSearchParams();
 
     if (filters?.page) params.append('page', filters.page.toString());
     if (filters?.limit) params.append('limit', filters.limit.toString());
-    if (filters?.status) params.append('status', filters.status);
-    if (filters?.sortBy) params.append('sortBy', filters.sortBy);
-    if (filters?.sortOrder) params.append('sortOrder', filters.sortOrder);
+    if (filters?.formId) params.append('formId', filters.formId);
 
     const query = params.toString() ? `?${params.toString()}` : '';
     return this.request('GET', `/api/inspections${query}`);
@@ -250,43 +216,25 @@ class ApiService {
    * Get inspection by ID
    */
   async getInspection(id: string): Promise<ApiResponse<any>> {
-    return this.request('GET', `/api/inspections/${id}`);
-  }
-
-  /**
-   * Update inspection
-   */
-  async updateInspection(
-    id: string,
-    updates: {
-      status?: 'draft' | 'submitted' | 'archived';
-      notes?: string;
-      inspectionPoints?: any[];
-    }
-  ): Promise<ApiResponse<any>> {
-    return this.request('PUT', `/api/inspections/${id}`, updates);
+    return this.request('GET', `/api/inspections/${encodeURIComponent(id)}`);
   }
 
   /**
    * Delete inspection
    */
   async deleteInspection(id: string): Promise<ApiResponse<any>> {
-    return this.request('DELETE', `/api/inspections/${id}`);
+    return this.request('DELETE', `/api/inspections/${encodeURIComponent(id)}`);
   }
 
   /**
-   * Send inspection report via backend email with PDF
+   * Email the stored PDF of an inspection. The server chooses the mail settings.
    */
   async sendInspectionEmail(
     inspectionId: string,
-    recipientEmail: string,
-    inspectionData?: any,
-    inspectionPoints?: any
+    recipientEmail: string
   ): Promise<ApiResponse<any>> {
-    return this.request('POST', `/api/inspections/${inspectionId}/send-email`, {
+    return this.request('POST', `/api/inspections/${encodeURIComponent(inspectionId)}/send-email`, {
       recipientEmail,
-      inspectionData,
-      inspectionPoints,
     });
   }
 
@@ -295,6 +243,44 @@ class ApiService {
    */
   async getStatistics(): Promise<ApiResponse<any>> {
     return this.request('GET', '/api/inspections/stats/summary');
+  }
+
+  /**
+   * Render a PDF from the data entered so far (nothing is saved).
+   */
+  async previewPdf(submission: object): Promise<ArrayBuffer> {
+    return this.requestPdf('POST', '/api/inspections/preview', submission);
+  }
+
+  /**
+   * Download the stored PDF of a submitted inspection.
+   */
+  async getInspectionPdf(id: string): Promise<ArrayBuffer> {
+    return this.requestPdf('GET', `/api/inspections/${encodeURIComponent(id)}/pdf`);
+  }
+
+  /**
+   * Request a PDF as raw bytes. PDFs are binary, so they must never be read as text.
+   */
+  private async requestPdf(method: 'GET' | 'POST', endpoint: string, body?: object): Promise<ArrayBuffer> {
+    if (!this.token) {
+      throw new Error('Not authenticated. Please sign in again.');
+    }
+
+    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+        ...(body && { 'Content-Type': 'application/json' }),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      throw new Error(data?.error?.message || `Request failed (HTTP ${response.status})`);
+    }
+    return response.arrayBuffer();
   }
 
   /**

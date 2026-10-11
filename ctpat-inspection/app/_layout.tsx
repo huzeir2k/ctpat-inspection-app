@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ApiService from './services/ApiService';
-import AuthService from './services/AuthService';
+import SupabaseAuthService from './services/SupabaseAuthService';
 
 const SETTINGS_STORAGE_KEY = 'ctpat_app_settings';
 
@@ -26,18 +26,19 @@ export default function RootLayout() {
           console.warn('Could not load backend URL override:', error);
         }
 
-        // Initialize authentication and get token
-        const token = await AuthService.initialize();
+        // Require a real signed-in Supabase session before talking to the backend
+        const session = await SupabaseAuthService.getSession();
+        if (session) {
+          ApiService.initialize(session.access_token);
 
-        // Initialize API service with token
-        ApiService.initialize(token);
-
-        // Test backend connection
-        const isHealthy = await ApiService.healthCheck();
-        if (isHealthy) {
-          console.log('✓ Backend connection healthy');
+          const isHealthy = await ApiService.healthCheck();
+          if (isHealthy) {
+            console.log('✓ Backend connection healthy');
+          } else {
+            console.warn('⚠️  Backend may not be available - offline mode enabled');
+          }
         } else {
-          console.warn('⚠️  Backend may not be available - offline mode enabled');
+          router.replace('/login');
         }
 
         setIsInitialized(true);
@@ -49,6 +50,18 @@ export default function RootLayout() {
     };
 
     initializeApp();
+
+    // Keep ApiService's token in sync with sign-in/sign-out/token-refresh events
+    const unsubscribe = SupabaseAuthService.onAuthStateChange((session) => {
+      if (session) {
+        ApiService.initialize(session.access_token);
+      } else {
+        ApiService.setToken('');
+        router.replace('/login');
+      }
+    });
+
+    return unsubscribe;
   }, []);
 
   if (!isInitialized) {
