@@ -12,7 +12,7 @@ const { createInspectionService } = require('../src/services/InspectionService')
 const { sampleSubmission } = require('../scripts/sampleData');
 const { createFakeInspectionModel, createFakeStorage } = require('./helpers/fakes');
 
-const tokenFor = (sub) => jwt.sign({ sub, email: `${sub}@example.com` }, process.env.SUPABASE_JWT_SECRET, { algorithm: 'HS256' });
+const tokenFor = (sub) => jwt.sign({ sub, email: `${sub}@example.com`, aud: 'authenticated' }, process.env.SUPABASE_JWT_SECRET, { algorithm: 'HS256' });
 const ALICE = tokenFor('aaaaaaaa-0000-4000-8000-000000000001');
 const BOB = tokenFor('bbbbbbbb-0000-4000-8000-000000000002');
 

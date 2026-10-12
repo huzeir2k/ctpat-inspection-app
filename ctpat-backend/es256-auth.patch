@@ -1,0 +1,381 @@
+diff --git a/ctpat-backend/.env.example b/ctpat-backend/.env.example
+index fa45c45..e6ae573 100644
+--- a/ctpat-backend/.env.example
++++ b/ctpat-backend/.env.example
+@@ -80,9 +80,11 @@ RATE_LIMIT_AUTH=20
+ # ====================
+ # JWT/AUTH
+ # ====================
+-# Supabase Auth's JWT signing secret (legacy HS256 shared secret), used to verify
+-# access tokens on every authenticated request. Get from Supabase Dashboard >
+-# Settings > API > JWT Settings. Required — the server refuses all auth'd
+-# requests if this is unset.
+-SUPABASE_JWT_SECRET=your-supabase-jwt-secret
+-
++# Access tokens are verified with your project's public signing keys, downloaded
++# from SUPABASE_URL (see above) - nothing else to configure for current Supabase
++# projects. Check: open <SUPABASE_URL>/auth/v1/.well-known/jwks.json in a browser;
++# it should list at least one key.
++#
++# Only for older projects that still sign tokens with a shared secret (HS256):
++# Supabase Dashboard > Settings > API > JWT Settings > Legacy JWT secret.
++# SUPABASE_JWT_SECRET=your-legacy-jwt-secret
+diff --git a/ctpat-backend/package.json b/ctpat-backend/package.json
+index 3636a9c..9233a59 100644
+--- a/ctpat-backend/package.json
++++ b/ctpat-backend/package.json
+@@ -31,6 +31,7 @@
+     "express-rate-limit": "^7.1.5",
+     "helmet": "^7.1.0",
+     "joi": "^17.11.0",
++    "jose": "^5.10.0",
+     "jsonwebtoken": "^9.0.2",
+     "mongoose": "^8.0.0",
+     "nodemailer": "^6.9.7",
+diff --git a/ctpat-backend/src/index.js b/ctpat-backend/src/index.js
+index 71e4ce3..7253bfd 100644
+--- a/ctpat-backend/src/index.js
++++ b/ctpat-backend/src/index.js
+@@ -19,7 +19,6 @@ const REQUIRED_IN_PRODUCTION = [
+   'SUPABASE_URL',
+   'SUPABASE_SERVICE_ROLE_KEY',
+   'SUPABASE_STORAGE_BUCKET',
+-  'SUPABASE_JWT_SECRET',
+   'CORS_ORIGIN',
+ ];
+ 
+diff --git a/ctpat-backend/src/middleware/auth.js b/ctpat-backend/src/middleware/auth.js
+index beb1aff..8c9f561 100644
+--- a/ctpat-backend/src/middleware/auth.js
++++ b/ctpat-backend/src/middleware/auth.js
+@@ -1,66 +1,118 @@
+ /**
+- * JWT Authentication Middleware
+- * Verifies Supabase Auth-issued access tokens (HS256, shared JWT secret) and
+- * extracts the authenticated user's id (`sub` claim) onto req.user.
++ * Authentication middleware.
++ *
++ * Verifies the access token Supabase Auth issued to the signed-in user and puts
++ * the user's id (the token's `sub` claim) on req.user.
++ *
++ * Supabase signs tokens in one of two ways, and both are supported:
++ *   - ES256 / RS256 (current projects): checked against the project's PUBLIC keys,
++ *     downloaded from <SUPABASE_URL>/auth/v1/.well-known/jwks.json. No secret needed.
++ *   - HS256 (older projects): checked against the shared secret SUPABASE_JWT_SECRET.
++ *
++ * Every token must also name this project as its issuer and be meant for signed-in
++ * users (audience "authenticated"), so the public anon key can never act as a user.
+  */
+ 
+-const jwt = require('jsonwebtoken');
++const { createRemoteJWKSet, jwtVerify, decodeProtectedHeader } = require('jose');
+ const { APIError } = require('./errorHandler');
+ 
+-const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET;
++const AUDIENCE = 'authenticated';
++const ASYMMETRIC_ALGORITHMS = ['ES256', 'RS256'];
+ 
+-if (!SUPABASE_JWT_SECRET) {
+-  console.error(
+-    '❌ SUPABASE_JWT_SECRET is not set. All authenticated requests will be rejected. ' +
+-    'Set it from Supabase Dashboard > Settings > API > JWT Settings.'
+-  );
+-}
+-
+-const authMiddleware = (req, res, next) => {
+-  try {
+-    const authHeader = req.headers.authorization;
+-
+-    if (!authHeader) {
+-      throw new APIError('Authorization header missing', 401);
++/**
++ * Builds an async function that returns the verified token payload or throws.
++ * `supabaseUrl` enables ES256/RS256 tokens; `jwtSecret` enables HS256 tokens.
++ */
++const createTokenVerifier = ({ supabaseUrl, jwtSecret }) => {
++  const issuer = supabaseUrl ? `${supabaseUrl.replace(/\/+$/, '')}/auth/v1` : undefined;
++
++  // jose downloads the keys once, caches them, and re-fetches when it sees an unknown
++  // key id (key rotation). The cooldown stops a stream of bad tokens from hammering Supabase.
++  const publicKeys = issuer
++    ? createRemoteJWKSet(new URL(`${issuer}/.well-known/jwks.json`), {
++        cacheMaxAge: 10 * 60 * 1000,
++        cooldownDuration: 30 * 1000,
++      })
++    : null;
++  const sharedSecret = jwtSecret ? new TextEncoder().encode(jwtSecret) : null;
++
++  return async (token) => {
++    const { alg } = decodeProtectedHeader(token);
++    const checks = { audience: AUDIENCE, ...(issuer && { issuer }) };
++
++    if (alg === 'HS256' && sharedSecret) {
++      return (await jwtVerify(token, sharedSecret, { ...checks, algorithms: ['HS256'] })).payload;
+     }
+-
+-    const parts = authHeader.split(' ');
+-    if (parts.length !== 2 || parts[0] !== 'Bearer') {
+-      throw new APIError('Invalid authorization header format', 401);
++    if (ASYMMETRIC_ALGORITHMS.includes(alg) && publicKeys) {
++      return (await jwtVerify(token, publicKeys, { ...checks, algorithms: ASYMMETRIC_ALGORITHMS })).payload;
+     }
++    // Includes "none", and any algorithm this server is not configured for.
++    throw new Error(`Unsupported or unconfigured token algorithm: ${alg}`);
++  };
++};
+ 
+-    const token = parts[1];
+-
+-    if (!SUPABASE_JWT_SECRET) {
+-      throw new APIError('Server authentication is not configured', 500);
++/**
++ * `getConfig` is called once, on the first request, so environment variables are
++ * read after dotenv has loaded them and tests can supply their own values.
++ */
++const createAuthMiddleware = (getConfig) => {
++  let verifier;
++  const getVerifier = () => {
++    if (verifier === undefined) {
++      const config = getConfig();
++      verifier = config.supabaseUrl || config.jwtSecret ? createTokenVerifier(config) : null;
++      if (!verifier) {
++        console.error('❌ Neither SUPABASE_URL nor SUPABASE_JWT_SECRET is set. All authenticated requests will be rejected.');
++      }
+     }
++    return verifier;
++  };
+ 
+-    let payload;
++  return async (req, res, next) => {
+     try {
+-      payload = jwt.verify(token, SUPABASE_JWT_SECRET, { algorithms: ['HS256'] });
+-    } catch (verifyError) {
+-      throw new APIError('Invalid or expired token', 401);
+-    }
+-
+-    if (!payload.sub) {
+-      throw new APIError('Token is missing the subject (user id) claim', 401);
++      const authHeader = req.headers.authorization;
++      if (!authHeader) {
++        throw new APIError('Authorization header missing', 401);
++      }
++
++      const parts = authHeader.split(' ');
++      if (parts.length !== 2 || parts[0] !== 'Bearer') {
++        throw new APIError('Invalid authorization header format', 401);
++      }
++
++      const verify = getVerifier();
++      if (!verify) {
++        throw new APIError('Server authentication is not configured', 500);
++      }
++
++      let payload;
++      try {
++        payload = await verify(parts[1]);
++      } catch (verifyError) {
++        // The reason goes to the server log only; the caller learns nothing about it.
++        if (process.env.NODE_ENV !== 'test') {
++          console.warn(`Token rejected: ${verifyError.code || verifyError.message}`);
++        }
++        throw new APIError('Invalid or expired token', 401);
++      }
++
++      if (!payload.sub) {
++        throw new APIError('Token is missing the subject (user id) claim', 401);
++      }
++
++      req.user = { id: payload.sub, email: payload.email, role: payload.role };
++      next();
++    } catch (error) {
++      next(error instanceof APIError ? error : new APIError('Authentication failed', 401));
+     }
+-
+-    req.user = {
+-      id: payload.sub,
+-      email: payload.email,
+-      role: payload.role,
+-    };
+-
+-    next();
+-  } catch (error) {
+-    if (error instanceof APIError) {
+-      return next(error);
+-    }
+-    next(new APIError('Authentication failed', 401));
+-  }
++  };
+ };
+ 
++const authMiddleware = createAuthMiddleware(() => ({
++  supabaseUrl: process.env.SUPABASE_URL,
++  jwtSecret: process.env.SUPABASE_JWT_SECRET,
++}));
++
+ /**
+  * Optional: Role-based access control
+  * Checks if user has required role
+@@ -104,6 +156,7 @@ const verifyOwnership = (ownershipField = 'printName') => {
+ 
+ module.exports = {
+   authMiddleware,
++  createAuthMiddleware,
+   requireRole,
+   verifyOwnership,
+ };
+diff --git a/ctpat-backend/test/api.test.js b/ctpat-backend/test/api.test.js
+index 139cc58..801e1bd 100644
+--- a/ctpat-backend/test/api.test.js
++++ b/ctpat-backend/test/api.test.js
+@@ -12,7 +12,7 @@ const { createInspectionService } = require('../src/services/InspectionService')
+ const { sampleSubmission } = require('../scripts/sampleData');
+ const { createFakeInspectionModel, createFakeStorage } = require('./helpers/fakes');
+ 
+-const tokenFor = (sub) => jwt.sign({ sub, email: `${sub}@example.com` }, process.env.SUPABASE_JWT_SECRET, { algorithm: 'HS256' });
++const tokenFor = (sub) => jwt.sign({ sub, email: `${sub}@example.com`, aud: 'authenticated' }, process.env.SUPABASE_JWT_SECRET, { algorithm: 'HS256' });
+ const ALICE = tokenFor('aaaaaaaa-0000-4000-8000-000000000001');
+ const BOB = tokenFor('bbbbbbbb-0000-4000-8000-000000000002');
+ 
+diff --git a/ctpat-backend/test/auth.test.js b/ctpat-backend/test/auth.test.js
+new file mode 100644
+index 0000000..a8dfb2a
+--- /dev/null
++++ b/ctpat-backend/test/auth.test.js
+@@ -0,0 +1,124 @@
++const test = require('node:test');
++const assert = require('node:assert/strict');
++const http = require('node:http');
++const { SignJWT, generateKeyPair, exportJWK } = require('jose');
++const { createAuthMiddleware } = require('../src/middleware/auth');
++
++const SECRET = 'a-shared-secret-of-reasonable-length-123';
++const KID = 'test-key-1';
++const USER = '11111111-1111-4111-8111-111111111111';
++
++let server;
++let supabaseUrl;
++let signingKey; // private half of the key the JWKS endpoint publishes
++let otherKey; // a key Supabase does NOT publish
++
++test.before(async () => {
++  const pair = await generateKeyPair('ES256');
++  otherKey = (await generateKeyPair('ES256')).privateKey;
++  signingKey = pair.privateKey;
++  const jwk = { ...(await exportJWK(pair.publicKey)), kid: KID, alg: 'ES256', use: 'sig' };
++
++  // Stands in for https://<project>.supabase.co/auth/v1/.well-known/jwks.json
++  server = http.createServer((req, res) => {
++    if (req.url === '/auth/v1/.well-known/jwks.json') {
++      res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ keys: [jwk] }));
++    } else {
++      res.writeHead(404).end();
++    }
++  });
++  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
++  supabaseUrl = `http://127.0.0.1:${server.address().port}`;
++});
++
++test.after(() => server.close());
++
++const issuer = () => `${supabaseUrl}/auth/v1`;
++
++const sign = ({ key = signingKey, alg = 'ES256', kid = KID, claims = {}, aud = 'authenticated', iss = issuer(), exp = '1h' } = {}) =>
++  new SignJWT({ email: 'x@example.com', role: 'authenticated', ...claims })
++    .setProtectedHeader({ alg, kid, typ: 'JWT' })
++    .setSubject(USER)
++    .setAudience(aud)
++    .setIssuer(iss)
++    .setIssuedAt()
++    .setExpirationTime(exp)
++    .sign(key);
++
++const hsKey = new TextEncoder().encode(SECRET);
++
++/** Runs the middleware against a fake request and reports what it did. */
++const run = async (middleware, authorization) => {
++  const req = { headers: authorization ? { authorization } : {} };
++  let error;
++  await new Promise((resolve) => {
++    middleware(req, {}, (err) => {
++      error = err;
++      resolve();
++    });
++  });
++  return { user: req.user, status: error?.statusCode, message: error?.message };
++};
++
++const withConfig = (config) => createAuthMiddleware(() => config);
++
++test('accepts a token signed with the project ES256 key and sets req.user', async () => {
++  const result = await run(withConfig({ supabaseUrl }), `Bearer ${await sign()}`);
++  assert.equal(result.status, undefined);
++  assert.deepEqual(result.user, { id: USER, email: 'x@example.com', role: 'authenticated' });
++});
++
++test('rejects a token signed with a key Supabase does not publish', async () => {
++  const result = await run(withConfig({ supabaseUrl }), `Bearer ${await sign({ key: otherKey })}`);
++  assert.equal(result.status, 401);
++});
++
++test('rejects expired tokens', async () => {
++  const result = await run(withConfig({ supabaseUrl }), `Bearer ${await sign({ exp: Math.floor(Date.now() / 1000) - 60 })}`);
++  assert.equal(result.status, 401);
++});
++
++test('rejects tokens for another audience, such as the anon role', async () => {
++  const result = await run(withConfig({ supabaseUrl }), `Bearer ${await sign({ aud: 'anon' })}`);
++  assert.equal(result.status, 401);
++});
++
++test('rejects tokens issued by a different project', async () => {
++  const result = await run(withConfig({ supabaseUrl }), `Bearer ${await sign({ iss: 'https://other.supabase.co/auth/v1' })}`);
++  assert.equal(result.status, 401);
++});
++
++test('accepts HS256 tokens only when a shared secret is configured', async () => {
++  const token = await sign({ key: hsKey, alg: 'HS256' });
++  assert.equal((await run(withConfig({ supabaseUrl, jwtSecret: SECRET }), `Bearer ${token}`)).user?.id, USER);
++  assert.equal((await run(withConfig({ supabaseUrl }), `Bearer ${token}`)).status, 401);
++});
++
++test('an HS256 token cannot be forged by using the public key as the secret', async () => {
++  const forged = await sign({ key: new TextEncoder().encode(KID), alg: 'HS256' });
++  assert.equal((await run(withConfig({ supabaseUrl }), `Bearer ${forged}`)).status, 401);
++});
++
++test('rejects unsigned tokens (alg "none")', async () => {
++  const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
++  const unsigned = `${encode({ alg: 'none', typ: 'JWT' })}.${encode({ sub: USER, aud: 'authenticated', iss: issuer() })}.`;
++  assert.equal((await run(withConfig({ supabaseUrl, jwtSecret: SECRET }), `Bearer ${unsigned}`)).status, 401);
++});
++
++test('rejects malformed and missing credentials', async () => {
++  const middleware = withConfig({ supabaseUrl });
++  assert.equal((await run(middleware)).status, 401);
++  assert.equal((await run(middleware, 'Basic abc')).status, 401);
++  assert.equal((await run(middleware, 'Bearer not-a-jwt')).status, 401);
++});
++
++test('fails closed with a 500 when no verification method is configured', async () => {
++  const quiet = console.error;
++  console.error = () => {};
++  try {
++    const result = await run(withConfig({}), `Bearer ${await sign()}`);
++    assert.equal(result.status, 500);
++  } finally {
++    console.error = quiet;
++  }
++});
+diff --git a/e2e/server.js b/e2e/server.js
+index 2675df7..dd1b307 100644
+--- a/e2e/server.js
++++ b/e2e/server.js
+@@ -64,7 +64,7 @@ const startServers = async () => {
+   const web = http.createServer(staticHandler);
+   await listen(web, WEB_PORT);
+ 
+-  const accessToken = jwt.sign({ sub: USER_ID, email: 'e2e@example.com' }, JWT_SECRET, { algorithm: 'HS256', expiresIn: '1h' });
++  const accessToken = jwt.sign({ sub: USER_ID, email: 'e2e@example.com', aud: 'authenticated' }, JWT_SECRET, { algorithm: 'HS256', expiresIn: '1h' });
+   return {
+     Inspection,
+     storage,
