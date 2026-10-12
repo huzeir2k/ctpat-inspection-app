@@ -1,35 +1,30 @@
 {
-  "cli": {
-    "version": ">= 5.9.0"
-  },
+  "cli": { "version": ">= 5.9.0", "appVersionSource": "remote" },
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal",
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://ctpat-inspection-app.onrender.com"
-      }
+      "distribution": "internal"
     },
     "preview": {
+      "node": "22.12.0",
       "distribution": "internal",
-      "android": {
-        "buildType": "apk"
-      },
+      "android": { "buildType": "apk" },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://ctpat-inspection-app.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://ctpat-inspection-app.onrender.com",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://ahocntmxekglbxpxaoza.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_A8GuMcCeS8T3OtK_3pgJ3Q_yXlrjF_m"
       }
     },
     "production": {
-      "distribution": "store",
-      "android": {
-        "buildType": "apk"
-      },
+      "node": "22.12.0",
+      "distribution": "internal",
+      "autoIncrement": true,
+      "android": { "buildType": "apk" },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://ctpat-inspection-app.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://ctpat-inspection-app.onrender.com",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://ahocntmxekglbxpxaoza.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_A8GuMcCeS8T3OtK_3pgJ3Q_yXlrjF_m"
       }
     }
-  },
-  "submit": {
-    "production": {}
   }
 }
