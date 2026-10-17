@@ -2,6 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import React, { useState } from 'react';
 import {
     Alert,
+    KeyboardAvoidingView,
     Modal,
     ScrollView,
     StyleSheet,
@@ -131,7 +132,8 @@ export default function SignatureCapture({ onSignatureSaved }: SignatureCaptureP
       </TouchableOpacity>
 
       <Modal visible={showModal} animationType="slide" transparent>
-        <View style={styles.modalContainer}>
+        {/* The sheet sits at the bottom of the screen, so lift it above the keyboard. */}
+        <KeyboardAvoidingView style={styles.modalContainer} behavior="padding">
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Signature</Text>
@@ -140,7 +142,7 @@ export default function SignatureCapture({ onSignatureSaved }: SignatureCaptureP
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBody}>
+            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
               {/* Signature Input */}
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Enter Your Signature</Text>
@@ -218,7 +220,7 @@ export default function SignatureCapture({ onSignatureSaved }: SignatureCaptureP
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </>
   );

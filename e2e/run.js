@@ -13,8 +13,11 @@ const path = require('path');
 const assert = require('node:assert/strict');
 const { execFileSync } = require('child_process');
 const { chromium } = require('playwright-core');
-const { WEB_PORT, SUPABASE_URL, USER_ID } = require('./config');
+const { WEB_PORT, USER_ID, TEST_LOGIN } = require('./config');
 const { startServers } = require('./server');
+const { accountScenarios } = require('./accountScenarios');
+const { responsiveScenarios } = require('./responsiveScenarios');
+const { sessionScript } = require('./session');
 
 const backend = path.resolve(__dirname, '../ctpat-backend');
 const { listForms } = require(path.join(backend, 'src/forms'));
@@ -27,20 +30,6 @@ const SAMPLE = { text: 'T-4821', date: '10/05/2026', time: '14:30', name: 'Maria
 /** The browser to use: $CHROME_PATH, else the one playwright installed. */
 const launch = () =>
   chromium.launch({ executablePath: process.env.CHROME_PATH || undefined, args: ['--no-sandbox'] });
-
-/** supabase-js keeps its session in localStorage under sb-<host>-auth-token. */
-const sessionScript = (accessToken) => {
-  const key = `sb-${new URL(SUPABASE_URL).hostname.split('.')[0]}-auth-token`;
-  const session = {
-    access_token: accessToken,
-    refresh_token: 'e2e-refresh',
-    token_type: 'bearer',
-    expires_in: 3600,
-    expires_at: Math.floor(Date.now() / 1000) + 3600,
-    user: { id: USER_ID, email: 'e2e@example.com', aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() },
-  };
-  return `localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(JSON.stringify(session))});`;
-};
 
 const pdfText = (buffer) => {
   const file = path.join(os.tmpdir(), `e2e-${process.pid}.pdf`);
@@ -130,6 +119,86 @@ const submit = async (page) => {
 };
 
 // ---------------------------------------------------------------------------
+// Login screen: what a signed-out user sees first, and what it says when sign-in fails.
+// ---------------------------------------------------------------------------
+
+/** Records whether the home or login screen was EVER on screen, even for one frame. */
+const screenWatcher = () => `
+  window.__seen = { home: false, login: false };
+  const check = () => {
+    const text = document.body ? document.body.innerText : '';
+    if (text.includes('Start Inspection')) window.__seen.home = true;
+    if (text.includes('Sign in to continue')) window.__seen.login = true;
+  };
+  new MutationObserver(check).observe(document, { subtree: true, childList: true, characterData: true });
+`;
+
+const seen = (page) => page.evaluate(() => window.__seen);
+
+const trySignIn = async (page, email, password) => {
+  await page.getByPlaceholder('you@company.com').fill(email);
+  await page.getByPlaceholder('••••••••').fill(password);
+  await page.getByText('Sign In', { exact: true }).click();
+};
+
+const bannerText = async (page, expected) => {
+  const banner = page.getByRole('alert');
+  await banner.waitFor();
+  assert.match(await banner.innerText(), expected);
+};
+
+const loginScenarios = async (browser) => {
+  // Signed out: login first, home never shown.
+  const signedOut = await browser.newContext({ viewport: { width: 430, height: 932 } });
+  await signedOut.addInitScript(screenWatcher());
+  const page = await signedOut.newPage();
+  await page.goto(APP);
+  await page.getByText('Sign in to continue').waitFor();
+  assert.deepEqual(await seen(page), { home: false, login: true }, 'login is the first screen; the home screen never flashes');
+
+  // The error message sits between the title block and the form.
+  await page.getByText('Sign In', { exact: true }).click();
+  await bannerText(page, /Enter your email and password/);
+  const y = async (locator) => (await locator.boundingBox()).y;
+  const bannerY = await y(page.getByRole('alert'));
+  assert.ok((await y(page.getByText('Sign in to continue'))) < bannerY, 'error is below the title');
+  assert.ok(bannerY < (await y(page.getByText('Email', { exact: true }))), 'error is above the form');
+
+  await trySignIn(page, TEST_LOGIN.email, 'wrong-password');
+  await bannerText(page, /Incorrect email or password/);
+  await page.getByPlaceholder('••••••••').fill('x');
+  await page.getByRole('alert').waitFor({ state: 'detached' }); // typing clears the message
+
+  await page.route('**/auth/v1/token**', (route) => route.abort('failed'));
+  await trySignIn(page, TEST_LOGIN.email, TEST_LOGIN.password);
+  await bannerText(page, /No network connection/);
+
+  await page.unroute('**/auth/v1/token**');
+  await page.route('**/auth/v1/token**', (route) => route.fulfill({ status: 503, body: '{}', headers: { 'Access-Control-Allow-Origin': '*' } }));
+  await trySignIn(page, TEST_LOGIN.email, TEST_LOGIN.password);
+  await bannerText(page, /unavailable/);
+
+  await page.unroute('**/auth/v1/token**');
+  await trySignIn(page, TEST_LOGIN.email, TEST_LOGIN.password);
+  await page.getByText('Start Inspection', { exact: true }).waitFor();
+  assert.equal(await page.getByText('Sign in to continue').count(), 0, 'login screen is gone after signing in');
+  console.log('ok  login: shown first, no home flash, errors for empty / wrong password / offline / outage, then home');
+  await signedOut.close();
+};
+
+const returningUserScenario = async (browser, accessToken) => {
+  const context = await browser.newContext({ viewport: { width: 430, height: 932 } });
+  await context.addInitScript(sessionScript(accessToken));
+  await context.addInitScript(screenWatcher());
+  const page = await context.newPage();
+  await page.goto(APP);
+  await page.getByText('Start Inspection', { exact: true }).waitFor();
+  assert.deepEqual(await seen(page), { home: true, login: false }, 'a signed-in user goes straight to home, without a login flash');
+  console.log('ok  returning user: straight to home, login never shown');
+  await context.close();
+};
+
+// ---------------------------------------------------------------------------
 
 const run = async () => {
   fs.mkdirSync(SCREENSHOTS, { recursive: true });
@@ -139,6 +208,10 @@ const run = async () => {
   let failed = false;
 
   try {
+    await loginScenarios(browser);
+    await returningUserScenario(browser, servers.accessToken);
+    await accountScenarios(browser, servers.supabase);
+
     const context = await browser.newContext({ viewport: { width: 430, height: 932 } });
     await context.addInitScript(sessionScript(servers.accessToken));
     const page = await context.newPage();
@@ -187,6 +260,8 @@ const run = async () => {
     assert.equal(await page.getByText(FREIGHT_BILL).count(), listForms().length, 'history lists every submission with its freight bill');
     await page.screenshot({ path: path.join(SCREENSHOTS, 'history.png'), fullPage: true });
     console.log('ok  history shows all five inspections with their freight bill numbers');
+
+    await responsiveScenarios(browser, servers.accessToken);
   } catch (error) {
     failed = true;
     console.error('FAILED:', error.message);

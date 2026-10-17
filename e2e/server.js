@@ -7,7 +7,8 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { API_PORT, WEB_PORT, JWT_SECRET, USER_ID } = require('./config');
+const { API_PORT, WEB_PORT, SUPABASE_URL, JWT_SECRET, USER_ID } = require('./config');
+const { createFakeSupabase } = require('./fakeSupabase');
 
 const backend = path.resolve(__dirname, '../ctpat-backend');
 // Use the backend's own dependency so there is a single copy of jsonwebtoken.
@@ -64,12 +65,29 @@ const startServers = async () => {
   const web = http.createServer(staticHandler);
   await listen(web, WEB_PORT);
 
-  const accessToken = jwt.sign({ sub: USER_ID, email: 'e2e@example.com' }, JWT_SECRET, { algorithm: 'HS256', expiresIn: '1h' });
+  // Tokens signed like Supabase's, so the real API accepts them.
+  const signToken = (user) =>
+    jwt.sign({ sub: user.id, email: user.email, aud: 'authenticated', user_metadata: user.metadata }, JWT_SECRET, { algorithm: 'HS256', expiresIn: '1h' });
+  // The fake only needs to tell which account a token belongs to.
+  signToken.matches = (token, user) => {
+    try {
+      return jwt.verify(token, JWT_SECRET).sub === user.id;
+    } catch {
+      return false;
+    }
+  };
+  const accessToken = signToken({ id: USER_ID, email: 'e2e@example.com', metadata: {} });
+
+  const supabase = createFakeSupabase({ signToken });
+  const auth = http.createServer(supabase.handle);
+  await listen(auth, Number(new URL(SUPABASE_URL).port));
+
   return {
     Inspection,
     storage,
     accessToken,
-    close: () => Promise.all([new Promise((r) => api.close(r)), new Promise((r) => web.close(r))]),
+    supabase,
+    close: () => Promise.all([api, web, auth].map((server) => new Promise((resolve) => server.close(resolve)))),
   };
 };
 

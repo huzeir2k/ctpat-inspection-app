@@ -1,72 +1,104 @@
 import { useEffect, useState } from 'react';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { Session } from '@supabase/supabase-js';
 import ApiService from './services/ApiService';
 import SupabaseAuthService from './services/SupabaseAuthService';
 
 const SETTINGS_STORAGE_KEY = 'ctpat_app_settings';
 
+// Keep the native splash screen up until we know whether someone is signed in, so the
+// home screen never flashes before the login screen.
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
+/** Applies a user-configured backend URL (Settings screen), if one was saved. */
+const loadBackendUrlOverride = async () => {
+  try {
+    const savedSettings = await AsyncStorage.getItem(SETTINGS_STORAGE_KEY);
+    const backendUrl = savedSettings ? JSON.parse(savedSettings).backendUrl : null;
+    if (backendUrl) {
+      ApiService.setBaseUrl(backendUrl);
+    }
+  } catch (error) {
+    console.warn('Could not load backend URL override:', error);
+  }
+};
+
+/** Keeps ApiService's bearer token in step with the signed-in session. */
+const applySession = (session: Session | null) => {
+  if (session) {
+    ApiService.initialize(session.access_token);
+  } else {
+    ApiService.setToken('');
+  }
+};
+
 export default function RootLayout() {
-  const [isInitialized, setIsInitialized] = useState(false);
-  const router = useRouter();
+  // undefined = still checking, null = signed out, Session = signed in
+  const [session, setSession] = useState<Session | null | undefined>(undefined);
 
   useEffect(() => {
-    const initializeApp = async () => {
+    let cancelled = false;
+
+    const start = async () => {
+      await loadBackendUrlOverride();
+
+      let initial: Session | null = null;
       try {
-        console.log('🚀 Initializing CTPAT Inspection App...');
-
-        // Apply a user-configured backend URL override (Settings screen), if one was saved
-        try {
-          const savedSettings = await AsyncStorage.getItem(SETTINGS_STORAGE_KEY);
-          const backendUrl = savedSettings ? JSON.parse(savedSettings).backendUrl : null;
-          if (backendUrl) {
-            ApiService.setBaseUrl(backendUrl);
-          }
-        } catch (error) {
-          console.warn('Could not load backend URL override:', error);
-        }
-
-        // Require a real signed-in Supabase session before talking to the backend
-        const session = await SupabaseAuthService.getSession();
-        if (session) {
-          ApiService.initialize(session.access_token);
-
-          const isHealthy = await ApiService.healthCheck();
-          if (isHealthy) {
-            console.log('✓ Backend connection healthy');
-          } else {
-            console.warn('⚠️  Backend may not be available - offline mode enabled');
-          }
-        } else {
-          router.replace('/login');
-        }
-
-        setIsInitialized(true);
-        console.log('✓ App initialized successfully');
+        initial = await SupabaseAuthService.getSession();
       } catch (error) {
-        console.error('Error initializing app:', error);
-        setIsInitialized(true); // Continue anyway
+        console.error('Error reading the saved session:', error);
+      }
+
+      if (cancelled) return;
+      applySession(initial);
+      setSession(initial);
+      SplashScreen.hideAsync().catch(() => {});
+
+      // Informational only: do not make the user wait for it (a sleeping server can take a while).
+      if (initial) {
+        ApiService.healthCheck().then((healthy) => {
+          if (!healthy) console.warn('Backend may not be available');
+        });
       }
     };
 
-    initializeApp();
+    start();
 
-    // Keep ApiService's token in sync with sign-in/sign-out/token-refresh events
-    const unsubscribe = SupabaseAuthService.onAuthStateChange((session) => {
-      if (session) {
-        ApiService.initialize(session.access_token);
-      } else {
-        ApiService.setToken('');
-        router.replace('/login');
-      }
+    // Sign-in, sign-out and token refresh all arrive here.
+    const unsubscribe = SupabaseAuthService.onAuthStateChange((next) => {
+      applySession(next);
+      setSession(next);
     });
 
-    return unsubscribe;
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, []);
 
-  if (!isInitialized) {
-    return <Stack />;
+  // Render nothing while the splash screen is still showing.
+  if (session === undefined) {
+    return null;
   }
 
-  return <Stack />;
+  const isSignedIn = session !== null;
+
+  // Stack.Protected removes the screens that do not apply: signed out, only "login" exists;
+  // signed in, "login" is gone. When the session changes the router moves to the first
+  // screen that is still available, so no screen navigates to another by hand.
+  return (
+    <Stack>
+      <Stack.Protected guard={isSignedIn}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="inspection" />
+        <Stack.Screen name="history" />
+        <Stack.Screen name="settings" />
+      </Stack.Protected>
+      <Stack.Protected guard={!isSignedIn}>
+        <Stack.Screen name="login" options={{ headerShown: false }} />
+      </Stack.Protected>
+    </Stack>
+  );
 }

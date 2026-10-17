@@ -3,7 +3,6 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -13,6 +12,7 @@ import {
 import ChecklistSection from "../components/ChecklistSection";
 import DynamicField from "../components/DynamicField";
 import FormTypePicker from "../components/FormTypePicker";
+import KeyboardAwareScrollView from "../components/KeyboardAwareScrollView";
 import {
   FieldValue,
   FORMS,
@@ -203,7 +203,7 @@ export default function InspectionView() {
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.content} keyboardShouldPersistTaps="handled">
+          <KeyboardAwareScrollView style={styles.content}>
             {activeTab === "checklist" ? (
               <>
                 <Text style={styles.formTitle}>{form.title}</Text>
@@ -256,7 +256,7 @@ export default function InspectionView() {
               </>
             )}
             <View style={{ height: 40 }} />
-          </ScrollView>
+          </KeyboardAwareScrollView>
         </>
       ) : (
         <View style={styles.empty}>

@@ -2,7 +2,6 @@ import { useFocusEffect, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
     Alert,
-    ScrollView,
     StyleSheet,
     Switch,
     Text,
@@ -11,6 +10,7 @@ import {
     View,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import KeyboardAwareScrollView from "../components/KeyboardAwareScrollView";
 import ApiService from "../services/ApiService";
 import SupabaseAuthService from "../services/SupabaseAuthService";
 
@@ -79,8 +79,8 @@ export default function SettingsView() {
       {
         text: "Sign Out",
         onPress: async () => {
+          // The root layout shows the login screen as soon as the session ends.
           await SupabaseAuthService.signOut();
-          router.replace("/login");
         },
       },
     ]);
@@ -182,7 +182,6 @@ export default function SettingsView() {
               await AsyncStorage.clear();
               await SupabaseAuthService.signOut();
               Alert.alert("Success", "App data cleared. Please restart the app.");
-              router.push("../");
             } catch (error) {
               Alert.alert("Error", "Failed to clear app data");
             }
@@ -229,7 +228,7 @@ export default function SettingsView() {
         <View style={{ width: 50 }} />
       </View>
 
-      <ScrollView style={styles.content}>
+      <KeyboardAwareScrollView style={styles.content}>
         {/* Backend Connection Status */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Backend Connection</Text>
@@ -497,7 +496,7 @@ export default function SettingsView() {
         </View>
 
         <View style={{ height: 40 }} />
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

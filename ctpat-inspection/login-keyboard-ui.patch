@@ -1,0 +1,813 @@
+diff --git a/ctpat-inspection/app/_layout.tsx b/ctpat-inspection/app/_layout.tsx
+index b0deadc..1863716 100644
+--- a/ctpat-inspection/app/_layout.tsx
++++ b/ctpat-inspection/app/_layout.tsx
+@@ -1,72 +1,104 @@
+ import { useEffect, useState } from 'react';
+-import { Stack, useRouter } from 'expo-router';
++import { Stack } from 'expo-router';
++import * as SplashScreen from 'expo-splash-screen';
+ import AsyncStorage from '@react-native-async-storage/async-storage';
++import type { Session } from '@supabase/supabase-js';
+ import ApiService from './services/ApiService';
+ import SupabaseAuthService from './services/SupabaseAuthService';
+ 
+ const SETTINGS_STORAGE_KEY = 'ctpat_app_settings';
+ 
++// Keep the native splash screen up until we know whether someone is signed in, so the
++// home screen never flashes before the login screen.
++SplashScreen.preventAutoHideAsync().catch(() => {});
++
++/** Applies a user-configured backend URL (Settings screen), if one was saved. */
++const loadBackendUrlOverride = async () => {
++  try {
++    const savedSettings = await AsyncStorage.getItem(SETTINGS_STORAGE_KEY);
++    const backendUrl = savedSettings ? JSON.parse(savedSettings).backendUrl : null;
++    if (backendUrl) {
++      ApiService.setBaseUrl(backendUrl);
++    }
++  } catch (error) {
++    console.warn('Could not load backend URL override:', error);
++  }
++};
++
++/** Keeps ApiService's bearer token in step with the signed-in session. */
++const applySession = (session: Session | null) => {
++  if (session) {
++    ApiService.initialize(session.access_token);
++  } else {
++    ApiService.setToken('');
++  }
++};
++
+ export default function RootLayout() {
+-  const [isInitialized, setIsInitialized] = useState(false);
+-  const router = useRouter();
++  // undefined = still checking, null = signed out, Session = signed in
++  const [session, setSession] = useState<Session | null | undefined>(undefined);
+ 
+   useEffect(() => {
+-    const initializeApp = async () => {
++    let cancelled = false;
++
++    const start = async () => {
++      await loadBackendUrlOverride();
++
++      let initial: Session | null = null;
+       try {
+-        console.log('🚀 Initializing CTPAT Inspection App...');
+-
+-        // Apply a user-configured backend URL override (Settings screen), if one was saved
+-        try {
+-          const savedSettings = await AsyncStorage.getItem(SETTINGS_STORAGE_KEY);
+-          const backendUrl = savedSettings ? JSON.parse(savedSettings).backendUrl : null;
+-          if (backendUrl) {
+-            ApiService.setBaseUrl(backendUrl);
+-          }
+-        } catch (error) {
+-          console.warn('Could not load backend URL override:', error);
+-        }
+-
+-        // Require a real signed-in Supabase session before talking to the backend
+-        const session = await SupabaseAuthService.getSession();
+-        if (session) {
+-          ApiService.initialize(session.access_token);
+-
+-          const isHealthy = await ApiService.healthCheck();
+-          if (isHealthy) {
+-            console.log('✓ Backend connection healthy');
+-          } else {
+-            console.warn('⚠️  Backend may not be available - offline mode enabled');
+-          }
+-        } else {
+-          router.replace('/login');
+-        }
+-
+-        setIsInitialized(true);
+-        console.log('✓ App initialized successfully');
++        initial = await SupabaseAuthService.getSession();
+       } catch (error) {
+-        console.error('Error initializing app:', error);
+-        setIsInitialized(true); // Continue anyway
++        console.error('Error reading the saved session:', error);
+       }
+-    };
+ 
+-    initializeApp();
++      if (cancelled) return;
++      applySession(initial);
++      setSession(initial);
++      SplashScreen.hideAsync().catch(() => {});
+ 
+-    // Keep ApiService's token in sync with sign-in/sign-out/token-refresh events
+-    const unsubscribe = SupabaseAuthService.onAuthStateChange((session) => {
+-      if (session) {
+-        ApiService.initialize(session.access_token);
+-      } else {
+-        ApiService.setToken('');
+-        router.replace('/login');
++      // Informational only: do not make the user wait for it (a sleeping server can take a while).
++      if (initial) {
++        ApiService.healthCheck().then((healthy) => {
++          if (!healthy) console.warn('Backend may not be available');
++        });
+       }
++    };
++
++    start();
++
++    // Sign-in, sign-out and token refresh all arrive here.
++    const unsubscribe = SupabaseAuthService.onAuthStateChange((next) => {
++      applySession(next);
++      setSession(next);
+     });
+ 
+-    return unsubscribe;
++    return () => {
++      cancelled = true;
++      unsubscribe();
++    };
+   }, []);
+ 
+-  if (!isInitialized) {
+-    return <Stack />;
++  // Render nothing while the splash screen is still showing.
++  if (session === undefined) {
++    return null;
+   }
+ 
+-  return <Stack />;
++  const isSignedIn = session !== null;
++
++  // Stack.Protected removes the screens that do not apply: signed out, only "login" exists;
++  // signed in, "login" is gone. When the session changes the router moves to the first
++  // screen that is still available, so no screen navigates to another by hand.
++  return (
++    <Stack>
++      <Stack.Protected guard={isSignedIn}>
++        <Stack.Screen name="index" />
++        <Stack.Screen name="inspection" />
++        <Stack.Screen name="history" />
++        <Stack.Screen name="settings" />
++      </Stack.Protected>
++      <Stack.Protected guard={!isSignedIn}>
++        <Stack.Screen name="login" options={{ headerShown: false }} />
++      </Stack.Protected>
++    </Stack>
++  );
+ }
+diff --git a/ctpat-inspection/app/components/KeyboardAwareScrollView.tsx b/ctpat-inspection/app/components/KeyboardAwareScrollView.tsx
+new file mode 100644
+index 0000000..dfa2591
+--- /dev/null
++++ b/ctpat-inspection/app/components/KeyboardAwareScrollView.tsx
+@@ -0,0 +1,48 @@
++import React from 'react';
++import { KeyboardAvoidingView, Platform, ScrollView, ScrollViewProps, StyleSheet } from 'react-native';
++
++/**
++ * A ScrollView that keeps the focused input visible above the on-screen keyboard.
++ * Use it for every screen that contains text inputs.
++ *
++ * - iOS: the ScrollView itself adds the keyboard's height as bottom inset and scrolls
++ *   the focused input into view (`automaticallyAdjustKeyboardInsets`).
++ * - Android: the app draws edge to edge, so the system no longer resizes the window
++ *   for the keyboard. KeyboardAvoidingView adds the bottom padding instead.
++ *
++ * Tapping a button while the keyboard is open works on the first tap, and dragging
++ * the list dismisses the keyboard.
++ */
++export default function KeyboardAwareScrollView({
++  children,
++  contentContainerStyle,
++  ...scrollViewProps
++}: ScrollViewProps) {
++  const scrollView = (
++    <ScrollView
++      keyboardShouldPersistTaps="handled"
++      keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
++      automaticallyAdjustKeyboardInsets
++      contentContainerStyle={[styles.content, contentContainerStyle]}
++      {...scrollViewProps}
++    >
++      {children}
++    </ScrollView>
++  );
++
++  if (Platform.OS !== 'android') {
++    return scrollView;
++  }
++
++  return (
++    <KeyboardAvoidingView style={styles.fill} behavior="padding">
++      {scrollView}
++    </KeyboardAvoidingView>
++  );
++}
++
++const styles = StyleSheet.create({
++  fill: { flex: 1 },
++  // Leaves room under the last field so it can scroll clear of the keyboard.
++  content: { paddingBottom: 24 },
++});
+diff --git a/ctpat-inspection/app/components/SignatureCapture.tsx b/ctpat-inspection/app/components/SignatureCapture.tsx
+index d747e64..c93f80f 100644
+--- a/ctpat-inspection/app/components/SignatureCapture.tsx
++++ b/ctpat-inspection/app/components/SignatureCapture.tsx
+@@ -2,6 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
+ import React, { useState } from 'react';
+ import {
+     Alert,
++    KeyboardAvoidingView,
+     Modal,
+     ScrollView,
+     StyleSheet,
+@@ -131,7 +132,8 @@ export default function SignatureCapture({ onSignatureSaved }: SignatureCaptureP
+       </TouchableOpacity>
+ 
+       <Modal visible={showModal} animationType="slide" transparent>
+-        <View style={styles.modalContainer}>
++        {/* The sheet sits at the bottom of the screen, so lift it above the keyboard. */}
++        <KeyboardAvoidingView style={styles.modalContainer} behavior="padding">
+           <View style={styles.modalContent}>
+             <View style={styles.modalHeader}>
+               <Text style={styles.modalTitle}>Signature</Text>
+@@ -140,7 +142,7 @@ export default function SignatureCapture({ onSignatureSaved }: SignatureCaptureP
+               </TouchableOpacity>
+             </View>
+ 
+-            <ScrollView style={styles.modalBody}>
++            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
+               {/* Signature Input */}
+               <View style={styles.section}>
+                 <Text style={styles.sectionTitle}>Enter Your Signature</Text>
+@@ -218,7 +220,7 @@ export default function SignatureCapture({ onSignatureSaved }: SignatureCaptureP
+               </TouchableOpacity>
+             </View>
+           </View>
+-        </View>
++        </KeyboardAvoidingView>
+       </Modal>
+     </>
+   );
+diff --git a/ctpat-inspection/app/login.tsx b/ctpat-inspection/app/login.tsx
+index 521dff1..8525f76 100644
+--- a/ctpat-inspection/app/login.tsx
++++ b/ctpat-inspection/app/login.tsx
+@@ -1,101 +1,121 @@
+-import { useRouter } from 'expo-router';
+-import React, { useState } from 'react';
++import React, { useRef, useState } from 'react';
+ import {
+-    ActivityIndicator,
+-    Alert,
+-    KeyboardAvoidingView,
+-    Platform,
+-    StyleSheet,
+-    Text,
+-    TextInput,
+-    TouchableOpacity,
+-    View,
++  ActivityIndicator,
++  StyleSheet,
++  Text,
++  TextInput,
++  TouchableOpacity,
++  View,
+ } from 'react-native';
++import KeyboardAwareScrollView from './components/KeyboardAwareScrollView';
++import { describeSignInError } from './models/authErrors';
+ import SupabaseAuthService from './services/SupabaseAuthService';
+ 
++/**
++ * The first screen a signed-out user sees. Signing in updates the session, and the root
++ * layout (_layout.tsx) then moves the user to the home screen by itself.
++ */
+ export default function LoginScreen() {
+-  const router = useRouter();
+   const [email, setEmail] = useState('');
+   const [password, setPassword] = useState('');
++  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+   const [isSubmitting, setIsSubmitting] = useState(false);
++  const passwordInput = useRef<TextInput>(null);
+ 
+   const handleSignIn = async () => {
++    if (isSubmitting) return;
++
+     if (!email.trim() || !password) {
+-      Alert.alert('Missing Information', 'Please enter your email and password.');
++      setErrorMessage('Enter your email and password.');
+       return;
+     }
+ 
++    setErrorMessage(null);
+     setIsSubmitting(true);
+     try {
+       await SupabaseAuthService.signInWithPassword(email.trim(), password);
+-      router.replace('/');
+     } catch (error) {
+-      const message = error instanceof Error ? error.message : 'Sign-in failed';
+-      Alert.alert('Sign-In Error', message);
+-    } finally {
++      setErrorMessage(describeSignInError(error).message);
+       setIsSubmitting(false);
+     }
++    // On success this screen is removed by the layout, so there is nothing more to reset.
++  };
++
++  // Editing a field means the user is acting on the error, so stop showing it.
++  const onChange = (setter: (value: string) => void) => (value: string) => {
++    setter(value);
++    if (errorMessage) setErrorMessage(null);
+   };
+ 
+   return (
+-    <KeyboardAvoidingView
++    <KeyboardAwareScrollView
+       style={styles.container}
+-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
++      contentContainerStyle={styles.content}
+     >
+-      <View style={styles.form}>
+-        <Text style={styles.title}>CTPAT Inspection</Text>
+-        <Text style={styles.subtitle}>Sign in to continue</Text>
++      <Text style={styles.title}>CTPAT Inspection</Text>
++      <Text style={styles.subtitle}>Sign in to continue</Text>
+ 
+-        <View style={styles.formGroup}>
+-          <Text style={styles.label}>Email</Text>
+-          <TextInput
+-            style={styles.input}
+-            placeholder="you@company.com"
+-            value={email}
+-            onChangeText={setEmail}
+-            autoCapitalize="none"
+-            autoCorrect={false}
+-            keyboardType="email-address"
+-            editable={!isSubmitting}
+-          />
++      {errorMessage ? (
++        <View style={styles.errorBanner} accessibilityRole="alert" accessibilityLiveRegion="polite">
++          <Text style={styles.errorText}>{errorMessage}</Text>
+         </View>
++      ) : null}
+ 
+-        <View style={styles.formGroup}>
+-          <Text style={styles.label}>Password</Text>
+-          <TextInput
+-            style={styles.input}
+-            placeholder="••••••••"
+-            value={password}
+-            onChangeText={setPassword}
+-            secureTextEntry
+-            autoCapitalize="none"
+-            editable={!isSubmitting}
+-          />
+-        </View>
++      <View style={styles.formGroup}>
++        <Text style={styles.label}>Email</Text>
++        <TextInput
++          style={styles.input}
++          placeholder="you@company.com"
++          value={email}
++          onChangeText={onChange(setEmail)}
++          autoCapitalize="none"
++          autoCorrect={false}
++          autoComplete="email"
++          keyboardType="email-address"
++          returnKeyType="next"
++          onSubmitEditing={() => passwordInput.current?.focus()}
++          blurOnSubmit={false}
++          editable={!isSubmitting}
++        />
++      </View>
+ 
+-        <TouchableOpacity
+-          style={[styles.button, isSubmitting && styles.buttonDisabled]}
+-          onPress={handleSignIn}
+-          disabled={isSubmitting}
+-        >
+-          {isSubmitting ? (
+-            <ActivityIndicator color="#fff" />
+-          ) : (
+-            <Text style={styles.buttonText}>Sign In</Text>
+-          )}
+-        </TouchableOpacity>
++      <View style={styles.formGroup}>
++        <Text style={styles.label}>Password</Text>
++        <TextInput
++          ref={passwordInput}
++          style={styles.input}
++          placeholder="••••••••"
++          value={password}
++          onChangeText={onChange(setPassword)}
++          secureTextEntry
++          autoCapitalize="none"
++          autoComplete="current-password"
++          returnKeyType="go"
++          onSubmitEditing={handleSignIn}
++          editable={!isSubmitting}
++        />
+       </View>
+-    </KeyboardAvoidingView>
++
++      <TouchableOpacity
++        style={[styles.button, isSubmitting && styles.buttonDisabled]}
++        onPress={handleSignIn}
++        disabled={isSubmitting}
++      >
++        {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
++      </TouchableOpacity>
++    </KeyboardAwareScrollView>
+   );
+ }
+ 
+ const styles = StyleSheet.create({
+   container: {
+     flex: 1,
+-    justifyContent: 'center',
+     backgroundColor: '#f5f5f5',
+   },
+-  form: {
++  // flexGrow centres the form on tall screens; on short ones (keyboard open) it scrolls.
++  content: {
++    flexGrow: 1,
++    justifyContent: 'center',
+     padding: 24,
+   },
+   title: {
+@@ -109,7 +129,22 @@ const styles = StyleSheet.create({
+     textAlign: 'center',
+     color: '#666',
+     marginTop: 8,
+-    marginBottom: 32,
++    marginBottom: 24,
++  },
++  errorBanner: {
++    backgroundColor: '#fdecea',
++    borderWidth: 1,
++    borderColor: '#f5c2c0',
++    borderRadius: 8,
++    paddingHorizontal: 14,
++    paddingVertical: 10,
++    marginBottom: 16,
++  },
++  errorText: {
++    color: '#b3261e',
++    fontSize: 14,
++    fontWeight: '600',
++    textAlign: 'center',
+   },
+   formGroup: {
+     marginBottom: 16,
+diff --git a/ctpat-inspection/app/models/authErrors.ts b/ctpat-inspection/app/models/authErrors.ts
+new file mode 100644
+index 0000000..17bcdcb
+--- /dev/null
++++ b/ctpat-inspection/app/models/authErrors.ts
+@@ -0,0 +1,51 @@
++import { isAuthApiError, isAuthRetryableFetchError } from '@supabase/supabase-js';
++
++/**
++ * Turns whatever sign-in threw into a short message for the login screen.
++ *
++ * The raw Supabase text is never shown: it is written for developers, and "Invalid login
++ * credentials" is deliberately the same for an unknown email and a wrong password, so the
++ * screen must not say which of the two it was.
++ */
++export type SignInFailureKind =
++  | 'network'
++  | 'service-unavailable'
++  | 'invalid-credentials'
++  | 'email-not-confirmed'
++  | 'rate-limited'
++  | 'unknown';
++
++export interface SignInFailure {
++  kind: SignInFailureKind;
++  message: string;
++}
++
++const FAILURES: Record<SignInFailureKind, string> = {
++  network: 'No network connection. Check your internet and try again.',
++  'service-unavailable': 'The sign-in service is unavailable right now. Try again in a moment.',
++  'invalid-credentials': 'Incorrect email or password.',
++  'email-not-confirmed': 'Your email address has not been confirmed yet.',
++  'rate-limited': 'Too many attempts. Wait a minute and try again.',
++  unknown: 'Sign-in failed. Please try again.',
++};
++
++const classify = (error: unknown): SignInFailureKind => {
++  // Raised for failed requests: status 0 means the request never reached the server,
++  // 502-504 means the server (or a proxy in front of it) was down.
++  if (isAuthRetryableFetchError(error)) {
++    return error.status === 0 || error.status === undefined ? 'network' : 'service-unavailable';
++  }
++
++  if (isAuthApiError(error)) {
++    if (error.code === 'invalid_credentials') return 'invalid-credentials';
++    if (error.code === 'email_not_confirmed') return 'email-not-confirmed';
++    if (error.status === 429 || error.code === 'over_request_rate_limit') return 'rate-limited';
++  }
++
++  return 'unknown';
++};
++
++export const describeSignInError = (error: unknown): SignInFailure => {
++  const kind = classify(error);
++  return { kind, message: FAILURES[kind] };
++};
+diff --git a/ctpat-inspection/app/views/InspectionView.tsx b/ctpat-inspection/app/views/InspectionView.tsx
+index ed812a2..812244b 100644
+--- a/ctpat-inspection/app/views/InspectionView.tsx
++++ b/ctpat-inspection/app/views/InspectionView.tsx
+@@ -3,7 +3,6 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
+ import {
+   ActivityIndicator,
+   Alert,
+-  ScrollView,
+   StyleSheet,
+   Text,
+   TextInput,
+@@ -13,6 +12,7 @@ import {
+ import ChecklistSection from "../components/ChecklistSection";
+ import DynamicField from "../components/DynamicField";
+ import FormTypePicker from "../components/FormTypePicker";
++import KeyboardAwareScrollView from "../components/KeyboardAwareScrollView";
+ import {
+   FieldValue,
+   FORMS,
+@@ -203,7 +203,7 @@ export default function InspectionView() {
+             </TouchableOpacity>
+           </View>
+ 
+-          <ScrollView style={styles.content} keyboardShouldPersistTaps="handled">
++          <KeyboardAwareScrollView style={styles.content}>
+             {activeTab === "checklist" ? (
+               <>
+                 <Text style={styles.formTitle}>{form.title}</Text>
+@@ -256,7 +256,7 @@ export default function InspectionView() {
+               </>
+             )}
+             <View style={{ height: 40 }} />
+-          </ScrollView>
++          </KeyboardAwareScrollView>
+         </>
+       ) : (
+         <View style={styles.empty}>
+diff --git a/ctpat-inspection/app/views/SettingsView.tsx b/ctpat-inspection/app/views/SettingsView.tsx
+index 7c87d4b..c1a20dc 100644
+--- a/ctpat-inspection/app/views/SettingsView.tsx
++++ b/ctpat-inspection/app/views/SettingsView.tsx
+@@ -2,7 +2,6 @@ import { useFocusEffect, useRouter } from "expo-router";
+ import React, { useEffect, useState } from "react";
+ import {
+     Alert,
+-    ScrollView,
+     StyleSheet,
+     Switch,
+     Text,
+@@ -11,6 +10,7 @@ import {
+     View,
+ } from "react-native";
+ import AsyncStorage from "@react-native-async-storage/async-storage";
++import KeyboardAwareScrollView from "../components/KeyboardAwareScrollView";
+ import ApiService from "../services/ApiService";
+ import SupabaseAuthService from "../services/SupabaseAuthService";
+ 
+@@ -79,8 +79,8 @@ export default function SettingsView() {
+       {
+         text: "Sign Out",
+         onPress: async () => {
++          // The root layout shows the login screen as soon as the session ends.
+           await SupabaseAuthService.signOut();
+-          router.replace("/login");
+         },
+       },
+     ]);
+@@ -182,7 +182,6 @@ export default function SettingsView() {
+               await AsyncStorage.clear();
+               await SupabaseAuthService.signOut();
+               Alert.alert("Success", "App data cleared. Please restart the app.");
+-              router.push("../");
+             } catch (error) {
+               Alert.alert("Error", "Failed to clear app data");
+             }
+@@ -229,7 +228,7 @@ export default function SettingsView() {
+         <View style={{ width: 50 }} />
+       </View>
+ 
+-      <ScrollView style={styles.content}>
++      <KeyboardAwareScrollView style={styles.content}>
+         {/* Backend Connection Status */}
+         <View style={styles.section}>
+           <Text style={styles.sectionTitle}>Backend Connection</Text>
+@@ -497,7 +496,7 @@ export default function SettingsView() {
+         </View>
+ 
+         <View style={{ height: 40 }} />
+-      </ScrollView>
++      </KeyboardAwareScrollView>
+     </View>
+   );
+ }
+diff --git a/e2e/config.js b/e2e/config.js
+index 181384c..b93e699 100644
+--- a/e2e/config.js
++++ b/e2e/config.js
+@@ -5,4 +5,5 @@ module.exports = {
+   SUPABASE_URL: 'http://localhost:54321', // never contacted: the session is injected
+   JWT_SECRET: 'e2e-secret-e2e-secret-e2e-secret-12',
+   USER_ID: 'e2e00000-0000-4000-8000-000000000001',
++  TEST_LOGIN: { email: 'e2e@example.com', password: 'correct-horse-1' }, // accepted by the fake sign-in
+ };
+diff --git a/e2e/run.js b/e2e/run.js
+index 71ea622..fb69e01 100644
+--- a/e2e/run.js
++++ b/e2e/run.js
+@@ -13,7 +13,7 @@ const path = require('path');
+ const assert = require('node:assert/strict');
+ const { execFileSync } = require('child_process');
+ const { chromium } = require('playwright-core');
+-const { WEB_PORT, SUPABASE_URL, USER_ID } = require('./config');
++const { WEB_PORT, SUPABASE_URL, USER_ID, TEST_LOGIN } = require('./config');
+ const { startServers } = require('./server');
+ 
+ const backend = path.resolve(__dirname, '../ctpat-backend');
+@@ -129,6 +129,86 @@ const submit = async (page) => {
+   return responsePromise;
+ };
+ 
++// ---------------------------------------------------------------------------
++// Login screen: what a signed-out user sees first, and what it says when sign-in fails.
++// ---------------------------------------------------------------------------
++
++/** Records whether the home or login screen was EVER on screen, even for one frame. */
++const screenWatcher = () => `
++  window.__seen = { home: false, login: false };
++  const check = () => {
++    const text = document.body ? document.body.innerText : '';
++    if (text.includes('Start Inspection')) window.__seen.home = true;
++    if (text.includes('Sign in to continue')) window.__seen.login = true;
++  };
++  new MutationObserver(check).observe(document, { subtree: true, childList: true, characterData: true });
++`;
++
++const seen = (page) => page.evaluate(() => window.__seen);
++
++const trySignIn = async (page, email, password) => {
++  await page.getByPlaceholder('you@company.com').fill(email);
++  await page.getByPlaceholder('••••••••').fill(password);
++  await page.getByText('Sign In', { exact: true }).click();
++};
++
++const bannerText = async (page, expected) => {
++  const banner = page.getByRole('alert');
++  await banner.waitFor();
++  assert.match(await banner.innerText(), expected);
++};
++
++const loginScenarios = async (browser) => {
++  // Signed out: login first, home never shown.
++  const signedOut = await browser.newContext({ viewport: { width: 430, height: 932 } });
++  await signedOut.addInitScript(screenWatcher());
++  const page = await signedOut.newPage();
++  await page.goto(APP);
++  await page.getByText('Sign in to continue').waitFor();
++  assert.deepEqual(await seen(page), { home: false, login: true }, 'login is the first screen; the home screen never flashes');
++
++  // The error message sits between the title block and the form.
++  await page.getByText('Sign In', { exact: true }).click();
++  await bannerText(page, /Enter your email and password/);
++  const y = async (locator) => (await locator.boundingBox()).y;
++  const bannerY = await y(page.getByRole('alert'));
++  assert.ok((await y(page.getByText('Sign in to continue'))) < bannerY, 'error is below the title');
++  assert.ok(bannerY < (await y(page.getByText('Email', { exact: true }))), 'error is above the form');
++
++  await trySignIn(page, TEST_LOGIN.email, 'wrong-password');
++  await bannerText(page, /Incorrect email or password/);
++  await page.getByPlaceholder('••••••••').fill('x');
++  await page.getByRole('alert').waitFor({ state: 'detached' }); // typing clears the message
++
++  await page.route('**/auth/v1/token**', (route) => route.abort('failed'));
++  await trySignIn(page, TEST_LOGIN.email, TEST_LOGIN.password);
++  await bannerText(page, /No network connection/);
++
++  await page.unroute('**/auth/v1/token**');
++  await page.route('**/auth/v1/token**', (route) => route.fulfill({ status: 503, body: '{}', headers: { 'Access-Control-Allow-Origin': '*' } }));
++  await trySignIn(page, TEST_LOGIN.email, TEST_LOGIN.password);
++  await bannerText(page, /unavailable/);
++
++  await page.unroute('**/auth/v1/token**');
++  await trySignIn(page, TEST_LOGIN.email, TEST_LOGIN.password);
++  await page.getByText('Start Inspection', { exact: true }).waitFor();
++  assert.equal(await page.getByText('Sign in to continue').count(), 0, 'login screen is gone after signing in');
++  console.log('ok  login: shown first, no home flash, errors for empty / wrong password / offline / outage, then home');
++  await signedOut.close();
++};
++
++const returningUserScenario = async (browser, accessToken) => {
++  const context = await browser.newContext({ viewport: { width: 430, height: 932 } });
++  await context.addInitScript(sessionScript(accessToken));
++  await context.addInitScript(screenWatcher());
++  const page = await context.newPage();
++  await page.goto(APP);
++  await page.getByText('Start Inspection', { exact: true }).waitFor();
++  assert.deepEqual(await seen(page), { home: true, login: false }, 'a signed-in user goes straight to home, without a login flash');
++  console.log('ok  returning user: straight to home, login never shown');
++  await context.close();
++};
++
+ // ---------------------------------------------------------------------------
+ 
+ const run = async () => {
+@@ -139,6 +219,9 @@ const run = async () => {
+   let failed = false;
+ 
+   try {
++    await loginScenarios(browser);
++    await returningUserScenario(browser, servers.accessToken);
++
+     const context = await browser.newContext({ viewport: { width: 430, height: 932 } });
+     await context.addInitScript(sessionScript(servers.accessToken));
+     const page = await context.newPage();
+diff --git a/e2e/server.js b/e2e/server.js
+index dd1b307..f2ccbd7 100644
+--- a/e2e/server.js
++++ b/e2e/server.js
+@@ -7,7 +7,7 @@
+ const http = require('http');
+ const fs = require('fs');
+ const path = require('path');
+-const { API_PORT, WEB_PORT, JWT_SECRET, USER_ID } = require('./config');
++const { API_PORT, WEB_PORT, SUPABASE_URL, JWT_SECRET, USER_ID, TEST_LOGIN } = require('./config');
+ 
+ const backend = path.resolve(__dirname, '../ctpat-backend');
+ // Use the backend's own dependency so there is a single copy of jsonwebtoken.
+@@ -42,6 +42,50 @@ const staticHandler = (req, res) => {
+   res.writeHead(404).end('Not found');
+ };
+ 
++/**
++ * Stand-in for Supabase Auth's password sign-in, so the login screen can be tested.
++ * Right email and password: a session. Anything else: the same 400 Supabase sends.
++ */
++const createFakeAuthHandler = (accessToken) => (req, res) => {
++  const cors = {
++    'Access-Control-Allow-Origin': '*',
++    'Access-Control-Allow-Headers': 'apikey, authorization, content-type, x-client-info, x-supabase-api-version',
++    'Access-Control-Allow-Methods': 'POST, OPTIONS',
++  };
++  if (req.method === 'OPTIONS') return res.writeHead(204, cors).end();
++
++  const url = new URL(req.url, 'http://x');
++  if (req.method !== 'POST' || url.pathname !== '/auth/v1/token' || url.searchParams.get('grant_type') !== 'password') {
++    return res.writeHead(404, cors).end();
++  }
++
++  let body = '';
++  req.on('data', (chunk) => (body += chunk));
++  req.on('end', () => {
++    let credentials = {};
++    try {
++      credentials = JSON.parse(body);
++    } catch {
++      /* treated as wrong credentials below */
++    }
++    const json = { ...cors, 'Content-Type': 'application/json' };
++    if (credentials.email === TEST_LOGIN.email && credentials.password === TEST_LOGIN.password) {
++      const now = Math.floor(Date.now() / 1000);
++      return res.writeHead(200, json).end(
++        JSON.stringify({
++          access_token: accessToken,
++          token_type: 'bearer',
++          expires_in: 3600,
++          expires_at: now + 3600,
++          refresh_token: 'e2e-refresh',
++          user: { id: USER_ID, email: TEST_LOGIN.email, aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() },
++        })
++      );
++    }
++    res.writeHead(400, json).end(JSON.stringify({ code: 400, error_code: 'invalid_credentials', msg: 'Invalid login credentials' }));
++  });
++};
++
+ const listen = (server, port) => new Promise((resolve) => server.listen(port, '127.0.0.1', resolve));
+ 
+ const startServers = async () => {
+@@ -65,11 +109,14 @@ const startServers = async () => {
+   await listen(web, WEB_PORT);
+ 
+   const accessToken = jwt.sign({ sub: USER_ID, email: 'e2e@example.com', aud: 'authenticated' }, JWT_SECRET, { algorithm: 'HS256', expiresIn: '1h' });
++  const auth = http.createServer(createFakeAuthHandler(accessToken));
++  await listen(auth, Number(new URL(SUPABASE_URL).port));
++
+   return {
+     Inspection,
+     storage,
+     accessToken,
+-    close: () => Promise.all([new Promise((r) => api.close(r)), new Promise((r) => web.close(r))]),
++    close: () => Promise.all([api, web, auth].map((server) => new Promise((resolve) => server.close(resolve)))),
+   };
+ };
+ 
