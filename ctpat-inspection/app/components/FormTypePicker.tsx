@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { FlatList, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
+import Text from './AppText';
 import { FormDefinition } from '../models/InspectionForm';
 
 interface FormTypePickerProps {
@@ -25,18 +26,24 @@ export default function FormTypePicker({ forms, selectedFormId, onSelect }: Form
         <Text style={selected ? styles.value : styles.placeholder}>
           {selected ? selected.label : 'Select an inspection form...'}
         </Text>
-        <Text style={styles.arrow}>▾</Text>
+        <Text chrome style={styles.arrow}>▾</Text>
       </TouchableOpacity>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={() => setOpen(false)}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={() => setOpen(false)}
+        >
           <View style={styles.sheet}>
-            <Text style={styles.sheetTitle}>Choose Inspection Type</Text>
+            <Text chrome style={styles.sheetTitle}>Choose Inspection Type</Text>
             <FlatList
               data={forms}
               keyExtractor={(form) => form.id}
               renderItem={({ item }) => (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={[styles.option, item.id === selectedFormId && styles.optionSelected]}
                   onPress={() => {
                     setOpen(false);
@@ -65,10 +72,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#007AFF',
     borderRadius: 10,
+    minHeight: 52,
     padding: 14,
   },
-  value: { fontSize: 18, fontWeight: '600', color: '#222' },
-  placeholder: { fontSize: 18, color: '#999' },
+  // flex: 1 lets a long form name wrap instead of pushing the arrow off the edge.
+  value: { flex: 1, fontSize: 18, fontWeight: '600', color: '#222', marginRight: 8 },
+  placeholder: { flex: 1, fontSize: 18, color: '#999', marginRight: 8 },
   arrow: { fontSize: 18, color: '#007AFF' },
   backdrop: {
     flex: 1,
@@ -76,9 +85,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 24,
   },
-  sheet: { backgroundColor: '#fff', borderRadius: 14, padding: 16, maxHeight: '80%' },
+  // A centred dialog, never wider than a phone's width, even on an unfolded foldable.
+  sheet: { backgroundColor: '#fff', borderRadius: 14, padding: 16, maxHeight: '80%', width: '100%', maxWidth: 560, alignSelf: 'center' },
   sheetTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 10, color: '#222' },
-  option: { paddingVertical: 14, paddingHorizontal: 10, borderRadius: 8 },
+  option: { minHeight: 52, justifyContent: 'center', paddingVertical: 14, paddingHorizontal: 10, borderRadius: 8 },
   optionSelected: { backgroundColor: '#E6F0FF' },
   optionLabel: { fontSize: 18, fontWeight: '600', color: '#222' },
   optionCount: { fontSize: 13, color: '#777', marginTop: 2 },

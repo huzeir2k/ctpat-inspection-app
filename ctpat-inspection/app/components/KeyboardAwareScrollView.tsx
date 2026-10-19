@@ -1,8 +1,9 @@
 import React from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, ScrollViewProps, StyleSheet } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import ScreenScroll, { ScreenScrollProps } from './ScreenScroll';
 
 /**
- * A ScrollView that keeps the focused input visible above the on-screen keyboard.
+ * A ScreenScroll that also keeps the focused input visible above the on-screen keyboard.
  * Use it for every screen that contains text inputs.
  *
  * - iOS: the ScrollView itself adds the keyboard's height as bottom inset and scrolls
@@ -13,21 +14,16 @@ import { KeyboardAvoidingView, Platform, ScrollView, ScrollViewProps, StyleSheet
  * Tapping a button while the keyboard is open works on the first tap, and dragging
  * the list dismisses the keyboard.
  */
-export default function KeyboardAwareScrollView({
-  children,
-  contentContainerStyle,
-  ...scrollViewProps
-}: ScrollViewProps) {
+export default function KeyboardAwareScrollView({ children, ...scrollProps }: ScreenScrollProps) {
   const scrollView = (
-    <ScrollView
+    <ScreenScroll
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
       automaticallyAdjustKeyboardInsets
-      contentContainerStyle={[styles.content, contentContainerStyle]}
-      {...scrollViewProps}
+      {...scrollProps}
     >
       {children}
-    </ScrollView>
+    </ScreenScroll>
   );
 
   if (Platform.OS !== 'android') {
@@ -43,6 +39,4 @@ export default function KeyboardAwareScrollView({
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  // Leaves room under the last field so it can scroll clear of the keyboard.
-  content: { paddingBottom: 24 },
 });

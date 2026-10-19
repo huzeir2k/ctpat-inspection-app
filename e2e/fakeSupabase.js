@@ -32,7 +32,7 @@ const createFakeSupabase = ({ signToken }) => {
   ]);
   const outbox = []; // { type: 'signup' | 'recovery', email, code }
   const log = []; // requests received, in order, e.g. 'verify:recovery'
-  const options = { userUpdateDelayMs: 0 };
+  const options = { userUpdateDelayMs: 0, googleDenies: false };
 
   const publicUser = (user) => ({
     id: user.id,
@@ -68,6 +68,25 @@ const createFakeSupabase = ({ signToken }) => {
   };
 
   const handlers = {
+    // Where "Continue with Google" starts. The real Supabase sends the browser to Google and
+    // back; this goes straight back, carrying the session (or the error) after the "#".
+    'GET /auth/v1/authorize': (body, send, url, req, res) => {
+      log.push(`authorize:${url.searchParams.get('provider')}`);
+      const redirectTo = url.searchParams.get('redirect_to');
+      const back = (fragment) => res.writeHead(302, { Location: `${redirectTo}#${fragment}` }).end();
+
+      if (options.googleDenies) return back('error=access_denied&error_description=Access+was+denied');
+
+      const email = 'google.user@example.com';
+      let user = users.get(email);
+      if (!user) {
+        user = { id: crypto.randomUUID(), email, password: null, confirmed: true, metadata: { full_name: 'Gina Google' } };
+        users.set(email, user);
+      }
+      const session = sessionFor(user);
+      back(`access_token=${session.access_token}&refresh_token=${session.refresh_token}&expires_in=3600&token_type=bearer`);
+    },
+
     'POST /auth/v1/token': (body, send, url) => {
       if (url.searchParams.get('grant_type') !== 'password') return send(400, { error_code: 'unsupported_grant_type' });
       const user = users.get(String(body.email || '').toLowerCase());
@@ -118,6 +137,14 @@ const createFakeSupabase = ({ signToken }) => {
       send(200, sessionFor(user));
     },
 
+    // setSession() asks who the token belongs to.
+    'GET /auth/v1/user': (body, send, url, req) => {
+      const token = String(req.headers.authorization || '').replace(/^Bearer /, '');
+      const user = [...users.values()].find((candidate) => signToken.matches(token, candidate));
+      if (!user) return send(401, { code: 401, error_code: 'bad_jwt', msg: 'invalid JWT' });
+      send(200, publicUser(user));
+    },
+
     'PUT /auth/v1/user': async (body, send, url, req) => {
       log.push('update:user');
       const token = String(req.headers.authorization || '').replace(/^Bearer /, '');
@@ -149,7 +176,7 @@ const createFakeSupabase = ({ signToken }) => {
       } catch {
         /* an unreadable body is treated as empty */
       }
-      await handler(body, send, url, req);
+      await handler(body, send, url, req, res);
     });
   };
 

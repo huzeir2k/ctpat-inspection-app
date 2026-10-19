@@ -1,11 +1,16 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { StatusBar } from "expo-status-bar";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import ScreenScroll from "../components/ScreenScroll";
+import Text from "../components/AppText";
 import ApiService from "../services/ApiService";
 import StorageService from "../services/StorageService";
 
 export default function HomeView() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [stats, setStats] = useState({
     totalInspections: 0,
     thisMonth: 0,
@@ -54,83 +59,91 @@ export default function HomeView() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>CTPAT Inspection and Signoff App</Text>
+    <View style={styles.screen}>
+      <StatusBar style="dark" />
+      <ScreenScroll style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+        <View style={[styles.container, { paddingTop: insets.top + 24 }]}>
+          <Text style={styles.title}>CTPAT Inspection and Signoff App</Text>
 
-      {/* Backend Status Indicator */}
-      <View style={styles.statusContainer}>
-        <View
-          style={[
-            styles.statusDot,
-            backendStatus === 'connected' ? styles.connectedDot :
-            backendStatus === 'offline' ? styles.offlineDot :
-            styles.checkingDot
-          ]}
-        />
-        <Text style={styles.statusText}>
-          {backendStatus === 'connected' ? '✓ Backend Connected' :
-           backendStatus === 'offline' ? '⚠ Offline Mode' :
-           '⏳ Checking...'}
-        </Text>
-      </View>
+          {/* Backend Status Indicator */}
+          <View style={styles.statusContainer}>
+            <View
+              style={[
+                styles.statusDot,
+                backendStatus === 'connected' ? styles.connectedDot :
+                backendStatus === 'offline' ? styles.offlineDot :
+                styles.checkingDot
+              ]}
+            />
+            <Text style={styles.statusText}>
+              {backendStatus === 'connected' ? '✓ Backend Connected' :
+               backendStatus === 'offline' ? '⚠ Offline Mode' :
+               '⏳ Checking...'}
+            </Text>
+          </View>
 
-      {/* Statistics Dashboard */}
-      <View style={styles.statsContainer}>
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{stats.totalInspections}</Text>
-          <Text style={styles.statLabel}>Total Inspections</Text>
+          {/* Statistics Dashboard */}
+          <View style={styles.statsContainer}>
+            <View style={styles.statCard}>
+              <Text style={styles.statNumber}>{stats.totalInspections}</Text>
+              <Text chrome style={styles.statLabel}>Total Inspections</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statNumber}>{stats.thisMonth}</Text>
+              <Text chrome style={styles.statLabel}>This Month</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statNumber}>{stats.thisWeek}</Text>
+              <Text chrome style={styles.statLabel}>This Week</Text>
+            </View>
+          </View>
+
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity accessibilityRole="button"
+              style={styles.button}
+              onPress={() => router.push("./inspection")}
+            >
+              <Text chrome style={styles.buttonText}>Start Inspection</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity accessibilityRole="button"
+              style={styles.button}
+              onPress={() => router.push("./history")}
+            >
+              <Text chrome style={styles.buttonText}>View Inspection History</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity accessibilityRole="button"
+              style={styles.button}
+              onPress={() => router.push("./settings")}
+            >
+              <Text chrome style={styles.buttonText}>Settings</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.authorLabel}>app created by Huzeir Kurpejovic.</Text>
         </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{stats.thisMonth}</Text>
-          <Text style={styles.statLabel}>This Month</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{stats.thisWeek}</Text>
-          <Text style={styles.statLabel}>This Week</Text>
-        </View>
-      </View>
-
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => router.push("./inspection")}
-        >
-          <Text style={styles.buttonText}>Start Inspection</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => router.push("./history")}
-        >
-          <Text style={styles.buttonText}>View Inspection History</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => router.push("./settings")}
-        >
-          <Text style={styles.buttonText}>Settings</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Text style={styles.authorLabel}>app created by Huzeir Kurpejovic.</Text>
+      </ScreenScroll>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: "#fff" },
+  scroll: { flex: 1 },
+  // Fills the window, so the buttons sit at the bottom on tall screens; scrolls on short ones.
+  scrollContent: { flexGrow: 1 },
   container: {
-    flex: 1,
-    backgroundColor: "#fff",
+    flexGrow: 1,
     padding: 20,
     justifyContent: "space-between",
     alignItems: "center",
+    gap: 20,
   },
   title: {
     fontSize: 32,
     fontWeight: "bold",
     textAlign: "center",
-    marginTop: 60,
     color: "#333",
   },
   statusContainer: {
@@ -194,6 +207,7 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: "#007AFF",
+    minHeight: 56,
     paddingVertical: 18,
     paddingHorizontal: 20,
     borderRadius: 12,
@@ -208,6 +222,6 @@ const styles = StyleSheet.create({
   authorLabel: {
     fontSize: 14,
     color: "#888",
-    marginBottom: 40,
+    textAlign: "center",
   },
 });

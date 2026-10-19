@@ -1,5 +1,6 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import Text from './AppText';
 import { ChecklistItem } from '../models/InspectionForm';
 
 interface ChecklistSectionProps {
@@ -44,6 +45,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#fff',
     borderRadius: 10,
+    minHeight: 56,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
@@ -59,6 +61,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
+    flexShrink: 0,
   },
   boxChecked: { backgroundColor: '#34C759', borderColor: '#34C759' },
   tick: { color: '#fff', fontSize: 18, fontWeight: 'bold' },

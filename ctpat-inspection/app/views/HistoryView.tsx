@@ -1,20 +1,19 @@
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
-import {
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
-} from "react-native";
+import { Alert, StyleSheet, TouchableOpacity, View } from "react-native";
+import AppHeader from "../components/AppHeader";
+import Text from "../components/AppText";
+import ContentWidth from "../components/ContentWidth";
+import ScreenScroll from "../components/ScreenScroll";
+import useScreenSize from "../components/useScreenSize";
+import { CONTENT_MAX_WIDTH, MIN_TOUCH_TARGET, SPACING, WIDE_CONTENT_MAX_WIDTH } from "../models/theme";
 import { getFormById } from "../models/InspectionForm";
 import ApiService from "../services/ApiService";
 import PdfService from "../services/PdfService";
 import StorageService, { HistoryEntry } from "../services/StorageService";
 
 export default function HistoryView() {
-  const router = useRouter();
+  const { isExpanded } = useScreenSize();
   const [inspections, setInspections] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ totalInspections: 0, thisMonth: 0, thisWeek: 0 });
@@ -108,86 +107,87 @@ export default function HistoryView() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backButton}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>Inspection History</Text>
-        <View style={styles.spacer} />
-      </View>
+      <AppHeader title="Inspection History" />
 
-      <View style={styles.statsContainer}>
+      <ContentWidth maxWidth={isExpanded ? WIDE_CONTENT_MAX_WIDTH : CONTENT_MAX_WIDTH} style={styles.statsContainer}>
         <View style={styles.statBox}>
           <Text style={styles.statNumber}>{stats.totalInspections}</Text>
-          <Text style={styles.statLabel}>Total</Text>
+          <Text chrome style={styles.statLabel}>Total</Text>
         </View>
         <View style={styles.statBox}>
           <Text style={styles.statNumber}>{stats.thisMonth}</Text>
-          <Text style={styles.statLabel}>This Month</Text>
+          <Text chrome style={styles.statLabel}>This Month</Text>
         </View>
         <View style={styles.statBox}>
           <Text style={styles.statNumber}>{stats.thisWeek}</Text>
-          <Text style={styles.statLabel}>This Week</Text>
+          <Text chrome style={styles.statLabel}>This Week</Text>
         </View>
-      </View>
+      </ContentWidth>
 
       {!isOnline && (
         <Text style={styles.emptyText}>Offline: showing inspections saved on this device.</Text>
       )}
 
-      <ScrollView style={styles.listContainer}>
+      <ScreenScroll
+        style={styles.listContainer}
+        maxContentWidth={isExpanded ? WIDE_CONTENT_MAX_WIDTH : CONTENT_MAX_WIDTH}
+        contentContainerStyle={styles.listContent}
+      >
         {loading ? (
           <Text style={styles.loadingText}>Loading...</Text>
         ) : inspections.length === 0 ? (
           <Text style={styles.emptyText}>No completed inspections yet</Text>
         ) : (
-          inspections.map((inspection) => (
-            <View key={inspection.id} style={styles.inspectionCard}>
-              <View style={styles.cardHeader}>
-                <View>
-                  <Text style={styles.cardTitle}>
-                    {getFormById(inspection.formId)?.label ?? inspection.formId}
-                  </Text>
-                  <Text style={styles.cardSubtitle}>{inspection.summaryId}</Text>
-                </View>
-              </View>
-
-              <View style={styles.cardContent}>
-                {inspection.freightBillNumber ? (
-                  <View style={styles.detailRow}>
-                    <Text style={styles.label}>Freight Bill:</Text>
-                    <Text style={styles.value}>{inspection.freightBillNumber}</Text>
+          // One column on phones, two when the window is wide (unfolded foldable).
+          <View style={styles.cards}>
+            {inspections.map((inspection) => (
+              <View key={inspection.id} style={[styles.inspectionCard, isExpanded && styles.inspectionCardWide]}>
+                <View style={styles.cardHeader}>
+                  <View>
+                    <Text style={styles.cardTitle}>
+                      {getFormById(inspection.formId)?.label ?? inspection.formId}
+                    </Text>
+                    <Text style={styles.cardSubtitle}>{inspection.summaryId}</Text>
                   </View>
-                ) : null}
-                <View style={styles.detailRow}>
-                  <Text style={styles.label}>Date:</Text>
-                  <Text style={styles.value}>{inspection.date}</Text>
                 </View>
-                <View style={styles.detailRow}>
-                  <Text style={styles.label}>Inspector:</Text>
-                  <Text style={styles.value}>{inspection.printName}</Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Text style={styles.label}>Submitted:</Text>
-                  <Text style={styles.value}>{new Date(inspection.completedAt).toLocaleString()}</Text>
-                </View>
-              </View>
 
-              <View style={styles.cardActions}>
-                <TouchableOpacity style={styles.viewButton} onPress={() => handleViewPdf(inspection.id)}>
-                  <Text style={styles.deleteButtonText}>View PDF</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.deleteButton}
-                  onPress={() => handleDeleteInspection(inspection.id)}
-                >
-                  <Text style={styles.deleteButtonText}>Delete</Text>
-                </TouchableOpacity>
+                <View style={styles.cardContent}>
+                  {inspection.freightBillNumber ? (
+                    <View style={styles.detailRow}>
+                      <Text style={styles.label}>Freight Bill:</Text>
+                      <Text style={styles.value}>{inspection.freightBillNumber}</Text>
+                    </View>
+                  ) : null}
+                  <View style={styles.detailRow}>
+                    <Text style={styles.label}>Date:</Text>
+                    <Text style={styles.value}>{inspection.date}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.label}>Inspector:</Text>
+                    <Text style={styles.value}>{inspection.printName}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.label}>Submitted:</Text>
+                    <Text style={styles.value}>{new Date(inspection.completedAt).toLocaleString()}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.cardActions}>
+                  <TouchableOpacity accessibilityRole="button" style={styles.viewButton} onPress={() => handleViewPdf(inspection.id)}>
+                    <Text chrome style={styles.deleteButtonText}>View PDF</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity accessibilityRole="button"
+                    style={styles.deleteButton}
+                    onPress={() => handleDeleteInspection(inspection.id)}
+                  >
+                    <Text chrome style={styles.deleteButtonText}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-          ))
+            ))}
+          </View>
         )}
-      </ScrollView>
+      </ScreenScroll>
     </View>
   );
 }
@@ -197,31 +197,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f5f5f5",
   },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 15,
-    paddingVertical: 15,
-    backgroundColor: "#2196F3",
-  },
-  backButton: {
-    fontSize: 16,
-    color: "white",
-    fontWeight: "bold",
-  },
-  spacer: {
-    width: 50,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "white",
-  },
   statsContainer: {
     flexDirection: "row",
-    paddingHorizontal: 15,
-    paddingVertical: 15,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.lg,
     gap: 10,
   },
   statBox: {
@@ -248,8 +227,15 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     flex: 1,
-    paddingHorizontal: 15,
+  },
+  listContent: {
+    paddingHorizontal: SPACING.lg,
     paddingVertical: 10,
+  },
+  cards: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: SPACING.lg,
   },
   loadingText: {
     textAlign: "center",
@@ -264,15 +250,20 @@ const styles = StyleSheet.create({
     color: "#999",
   },
   inspectionCard: {
+    width: "100%",
     backgroundColor: "white",
     borderRadius: 10,
-    marginBottom: 15,
     overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  inspectionCardWide: {
+    // Two columns: half the row, minus half of the gap between them.
+    width: "48.5%",
+    flexGrow: 1,
   },
   cardHeader: {
     flexDirection: "row",
@@ -302,31 +293,40 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 8,
+    gap: 12,
   },
   label: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "bold",
     color: "#666",
   },
+  // Long values (dates) wrap inside the row instead of pushing past the edge.
   value: {
-    fontSize: 12,
+    flexShrink: 1,
+    fontSize: 13,
     color: "#333",
+    textAlign: "right",
   },
   cardActions: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "flex-end",
     paddingHorizontal: 15,
     paddingBottom: 12,
     gap: 8,
   },
   viewButton: {
-    paddingHorizontal: 12,
+    minHeight: MIN_TOUCH_TARGET,
+    justifyContent: "center",
+    paddingHorizontal: 16,
     paddingVertical: 8,
     backgroundColor: "#2196F3",
     borderRadius: 6,
   },
   deleteButton: {
-    paddingHorizontal: 12,
+    minHeight: MIN_TOUCH_TARGET,
+    justifyContent: "center",
+    paddingHorizontal: 16,
     paddingVertical: 8,
     backgroundColor: "#FF6B6B",
     borderRadius: 6,
@@ -334,6 +334,6 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     color: "white",
     fontWeight: "bold",
-    fontSize: 12,
+    fontSize: 14,
   },
 });

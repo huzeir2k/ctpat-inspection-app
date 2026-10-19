@@ -1,5 +1,6 @@
 import React from 'react';
-import { StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Switch, TextInput, TouchableOpacity, View } from 'react-native';
+import Text from './AppText';
 import { describeSignature, toSignatureValue } from '../models/signatureValue';
 import { FieldValue, FormField, SignatureValue } from '../models/InspectionForm';
 import SignatureCapture from './SignatureCapture';
@@ -36,7 +37,7 @@ export default function DynamicField({ field, value, onChange }: DynamicFieldPro
                 accessibilityRole="radio"
                 accessibilityState={{ selected: value === option.value }}
               >
-                <Text style={[styles.choiceText, value === option.value && styles.choiceTextSelected]}>
+                <Text chrome style={[styles.choiceText, value === option.value && styles.choiceTextSelected]}>
                   {option.label}
                 </Text>
               </TouchableOpacity>
@@ -101,9 +102,11 @@ const styles = StyleSheet.create({
   switchLabel: { flex: 1, marginBottom: 0, marginRight: 12 },
   choices: { flexDirection: 'row', flexWrap: 'wrap' },
   choice: {
+    minHeight: 44,
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#007AFF',
-    borderRadius: 20,
+    borderRadius: 24,
     paddingVertical: 8,
     paddingHorizontal: 16,
     marginRight: 8,

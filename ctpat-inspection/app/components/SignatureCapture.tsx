@@ -1,16 +1,10 @@
 import * as ImagePicker from 'expo-image-picker';
 import React, { useState } from 'react';
-import {
-    Alert,
-    KeyboardAvoidingView,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
-} from 'react-native';
+import { Alert, KeyboardAvoidingView, Modal, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Text from './AppText';
+import useScreenSize from './useScreenSize';
+import { MIN_TOUCH_TARGET } from '../models/theme';
 import SignatureService, { StoredSignature } from '../services/SignatureService';
 
 interface SignatureCaptureProps {
@@ -19,6 +13,8 @@ interface SignatureCaptureProps {
 }
 
 export default function SignatureCapture({ onSignatureSaved }: SignatureCaptureProps) {
+  const insets = useSafeAreaInsets();
+  const { isExpanded } = useScreenSize();
   const [showModal, setShowModal] = useState(false);
   const [savedSignatures, setSavedSignatures] = useState<StoredSignature[]>([]);
   const [signatureInput, setSignatureInput] = useState('');
@@ -121,24 +117,27 @@ export default function SignatureCapture({ onSignatureSaved }: SignatureCaptureP
 
   return (
     <>
-      <TouchableOpacity
+      <TouchableOpacity accessibilityRole="button"
         style={styles.openButton}
         onPress={() => {
           setShowModal(true);
           handleLoadSignatures();
         }}
       >
-        <Text style={styles.openButtonText}>✍️ Add Signature</Text>
+        <Text chrome style={styles.openButtonText}>✍️ Add Signature</Text>
       </TouchableOpacity>
 
       <Modal visible={showModal} animationType="slide" transparent>
         {/* The sheet sits at the bottom of the screen, so lift it above the keyboard. */}
-        <KeyboardAvoidingView style={styles.modalContainer} behavior="padding">
-          <View style={styles.modalContent}>
+        <KeyboardAvoidingView
+          style={[styles.modalContainer, isExpanded && styles.modalContainerCentered]}
+          behavior="padding"
+        >
+          <View style={[styles.modalContent, isExpanded ? styles.modalContentCentered : { paddingBottom: insets.bottom }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Signature</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)}>
-                <Text style={styles.closeButton}>✕</Text>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close" onPress={() => setShowModal(false)}>
+                <Text chrome style={styles.closeButton}>✕</Text>
               </TouchableOpacity>
             </View>
 
@@ -157,11 +156,11 @@ export default function SignatureCapture({ onSignatureSaved }: SignatureCaptureP
                   multiline
                   placeholderTextColor="#999"
                 />
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={styles.primaryButton}
                   onPress={handleSaveTextSignature}
                 >
-                  <Text style={styles.buttonText}>Save Signature</Text>
+                  <Text chrome style={styles.buttonText}>Save Signature</Text>
                 </TouchableOpacity>
               </View>
 
@@ -171,11 +170,11 @@ export default function SignatureCapture({ onSignatureSaved }: SignatureCaptureP
                 <Text style={styles.sectionDescription}>
                   Upload a photo of your handwritten signature
                 </Text>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={styles.uploadButton}
                   onPress={handleUploadSignature}
                 >
-                  <Text style={styles.buttonText}>📸 Upload Image</Text>
+                  <Text chrome style={styles.buttonText}>📸 Upload Image</Text>
                 </TouchableOpacity>
               </View>
 
@@ -192,13 +191,13 @@ export default function SignatureCapture({ onSignatureSaved }: SignatureCaptureP
                         <Text style={styles.signatureType}>Type: {sig.type}</Text>
                       </View>
                       <View style={styles.signatureActions}>
-                        <TouchableOpacity
+                        <TouchableOpacity accessibilityRole="button"
                           onPress={() => handleSelectSignature(sig)}
                           style={[styles.microButton, styles.useButton]}
                         >
                           <Text style={styles.microButtonText}>Use</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity
+                        <TouchableOpacity accessibilityRole="button"
                           onPress={() => handleDeleteSignature(sig.id)}
                           style={[styles.microButton, styles.deleteButton]}
                         >
@@ -212,11 +211,11 @@ export default function SignatureCapture({ onSignatureSaved }: SignatureCaptureP
             </ScrollView>
 
             <View style={styles.modalFooter}>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.cancelButton}
                 onPress={() => setShowModal(false)}
               >
-                <Text style={styles.buttonText}>Close</Text>
+                <Text chrome style={styles.buttonText}>Close</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -228,6 +227,8 @@ export default function SignatureCapture({ onSignatureSaved }: SignatureCaptureP
 
 const styles = StyleSheet.create({
   openButton: {
+    minHeight: MIN_TOUCH_TARGET,
+    justifyContent: "center",
     backgroundColor: '#FF6B6B',
     paddingVertical: 12,
     paddingHorizontal: 15,
@@ -245,12 +246,23 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
+  // A wide window (unfolded foldable) gets a centred dialog instead of a sheet from the bottom.
+  modalContainerCentered: {
+    justifyContent: 'center',
+    padding: 24,
+  },
   modalContent: {
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
     backgroundColor: 'white',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '90%',
     overflow: 'hidden',
+  },
+  modalContentCentered: {
+    borderRadius: 20,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -270,6 +282,11 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: '#999',
     fontWeight: 'bold',
+    minWidth: 44,
+    minHeight: 44,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    lineHeight: 44,
   },
   modalBody: {
     paddingHorizontal: 20,

@@ -1,0 +1,13 @@
+{
+  "name": "ctpat-e2e",
+  "private": true,
+  "description": "Runs the real mobile app (web build) against the real API with in-memory storage, in a headless browser.",
+  "scripts": {
+    "build-web": "node build-web.js",
+    "test": "node --test unit/authRedirect.test.js && node run.js",
+    "test:unit": "node --test unit/authRedirect.test.js"
+  },
+  "devDependencies": {
+    "playwright-core": "1.56.1"
+  }
+}

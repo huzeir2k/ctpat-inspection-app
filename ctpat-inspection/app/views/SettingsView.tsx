@@ -1,15 +1,10 @@
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import React, { useEffect, useState } from "react";
-import {
-    Alert,
-    StyleSheet,
-    Switch,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from "react-native";
+import { Alert, StyleSheet, Switch, TextInput, TouchableOpacity, View } from "react-native";
+import Text from "../components/AppText";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import AppHeader from "../components/AppHeader";
+import { MIN_TOUCH_TARGET } from "../models/theme";
 import KeyboardAwareScrollView from "../components/KeyboardAwareScrollView";
 import ApiService from "../services/ApiService";
 import SupabaseAuthService from "../services/SupabaseAuthService";
@@ -37,7 +32,6 @@ const DEFAULT_SETTINGS: SettingsData = {
 const SETTINGS_STORAGE_KEY = "ctpat_app_settings";
 
 export default function SettingsView() {
-  const router = useRouter();
   const [settings, setSettings] = useState<SettingsData>(DEFAULT_SETTINGS);
   const [isSaving, setIsSaving] = useState(false);
   const [editingEmail, setEditingEmail] = useState(false);
@@ -219,14 +213,7 @@ export default function SettingsView() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backButton}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Settings</Text>
-        <View style={{ width: 50 }} />
-      </View>
+      <AppHeader title="Settings" />
 
       <KeyboardAwareScrollView style={styles.content}>
         {/* Backend Connection Status */}
@@ -254,17 +241,17 @@ export default function SettingsView() {
             <View style={styles.userSection}>
               <Text style={styles.userLabel}>Signed in as</Text>
               <Text style={styles.userEmail}>{userEmail}</Text>
-              <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-                <Text style={styles.signOutButtonText}>Sign Out</Text>
+              <TouchableOpacity accessibilityRole="button" style={styles.signOutButton} onPress={handleSignOut}>
+                <Text chrome style={styles.signOutButtonText}>Sign Out</Text>
               </TouchableOpacity>
             </View>
           )}
 
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={styles.testButton}
             onPress={checkBackendStatus}
           >
-            <Text style={styles.testButtonText}>Check Connection</Text>
+            <Text chrome style={styles.testButtonText}>Check Connection</Text>
           </TouchableOpacity>
 
           <View style={styles.formGroup}>
@@ -280,17 +267,17 @@ export default function SettingsView() {
             />
           </View>
           <View style={styles.formButtonContainer}>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.saveButton}
               onPress={handleSaveBackendUrl}
             >
-              <Text style={styles.saveButtonText}>Save Backend URL</Text>
+              <Text chrome style={styles.saveButtonText}>Save Backend URL</Text>
             </TouchableOpacity>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.cancelButton}
               onPress={handleResetBackendUrl}
             >
-              <Text style={styles.cancelButtonText}>Reset to Default</Text>
+              <Text chrome style={styles.cancelButtonText}>Reset to Default</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -363,20 +350,20 @@ export default function SettingsView() {
               </View>
 
               <View style={styles.formButtonContainer}>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={styles.saveButton}
                   onPress={handleSaveEmail}
                   disabled={isSaving}
                 >
-                  <Text style={styles.saveButtonText}>
+                  <Text chrome style={styles.saveButtonText}>
                     {isSaving ? "Saving..." : "Save Email"}
                   </Text>
                 </TouchableOpacity>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={styles.cancelButton}
                   onPress={() => setEditingEmail(false)}
                 >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                  <Text chrome style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -394,11 +381,11 @@ export default function SettingsView() {
                   <Text style={styles.noEmailText}>No email configured</Text>
                 )}
               </View>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.editButton}
                 onPress={() => setEditingEmail(true)}
               >
-                <Text style={styles.editButtonText}>
+                <Text chrome style={styles.editButtonText}>
                   {settings.ctpatReceiverEmail ? "Edit Email" : "Add Email"}
                 </Text>
               </TouchableOpacity>
@@ -432,8 +419,8 @@ export default function SettingsView() {
             />
           </View>
 
-          <TouchableOpacity style={styles.saveSettingsButton} onPress={saveSettings}>
-            <Text style={styles.saveSettingsButtonText}>
+          <TouchableOpacity accessibilityRole="button" style={styles.saveSettingsButton} onPress={saveSettings}>
+            <Text chrome style={styles.saveSettingsButtonText}>
               {isSaving ? "Saving..." : "Save Inspector Information"}
             </Text>
           </TouchableOpacity>
@@ -443,25 +430,25 @@ export default function SettingsView() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Debugging Tools</Text>
 
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={styles.debugButton}
             onPress={handleViewRequestStats}
           >
-            <Text style={styles.debugButtonText}>📊 View Request Stats</Text>
+            <Text chrome style={styles.debugButtonText}>📊 View Request Stats</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={styles.debugButton}
             onPress={handleExportLogs}
           >
-            <Text style={styles.debugButtonText}>📋 Export Request Logs</Text>
+            <Text chrome style={styles.debugButtonText}>📋 Export Request Logs</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={[styles.debugButton, styles.clearButton]}
             onPress={() => ApiService.clearLogs()}
           >
-            <Text style={[styles.debugButtonText, styles.clearButtonText]}>
+            <Text chrome style={[styles.debugButtonText, styles.clearButtonText]}>
               🗑️ Clear Request Logs
             </Text>
           </TouchableOpacity>
@@ -470,11 +457,11 @@ export default function SettingsView() {
         {/* Danger Zone */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Danger Zone</Text>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={styles.dangerButton}
             onPress={handleClearAppData}
           >
-            <Text style={styles.dangerButtonText}>⚠️ Clear All App Data</Text>
+            <Text chrome style={styles.dangerButtonText}>⚠️ Clear All App Data</Text>
           </TouchableOpacity>
         </View>
 
@@ -505,25 +492,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
-  },
-  header: {
-    backgroundColor: "#007AFF",
-    paddingTop: 50,
-    paddingBottom: 15,
-    paddingHorizontal: 15,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  backButton: {
-    fontSize: 16,
-    color: "#fff",
-    fontWeight: "600",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#fff",
   },
   content: {
     flex: 1,
@@ -601,6 +569,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   signOutButton: {
+    minHeight: MIN_TOUCH_TARGET,
+    justifyContent: "center",
     marginTop: 10,
     alignSelf: 'flex-start',
     paddingVertical: 6,
@@ -614,6 +584,8 @@ const styles = StyleSheet.create({
     color: '#cc3333',
   },
   testButton: {
+    minHeight: MIN_TOUCH_TARGET,
+    justifyContent: "center",
     marginHorizontal: 15,
     marginVertical: 12,
     backgroundColor: '#007AFF',
@@ -681,6 +653,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   saveButton: {
+    minHeight: MIN_TOUCH_TARGET,
+    justifyContent: "center",
     flex: 1,
     backgroundColor: "#007AFF",
     paddingVertical: 12,
@@ -693,6 +667,8 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   cancelButton: {
+    minHeight: MIN_TOUCH_TARGET,
+    justifyContent: "center",
     flex: 1,
     backgroundColor: "#ddd",
     paddingVertical: 12,
@@ -726,6 +702,8 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
   editButton: {
+    minHeight: MIN_TOUCH_TARGET,
+    justifyContent: "center",
     marginHorizontal: 15,
     marginBottom: 15,
     backgroundColor: "#007AFF",
@@ -739,6 +717,8 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   saveSettingsButton: {
+    minHeight: MIN_TOUCH_TARGET,
+    justifyContent: "center",
     marginHorizontal: 15,
     marginBottom: 15,
     backgroundColor: "#007AFF",
@@ -752,6 +732,8 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   debugButton: {
+    minHeight: MIN_TOUCH_TARGET,
+    justifyContent: "center",
     marginHorizontal: 15,
     marginVertical: 8,
     backgroundColor: '#5C6BC0',
@@ -765,12 +747,16 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   clearButton: {
+    minHeight: MIN_TOUCH_TARGET,
+    justifyContent: "center",
     backgroundColor: '#9C27B0',
   },
   clearButtonText: {
     color: '#fff',
   },
   dangerButton: {
+    minHeight: MIN_TOUCH_TARGET,
+    justifyContent: "center",
     marginHorizontal: 15,
     marginVertical: 10,
     backgroundColor: '#F44336',

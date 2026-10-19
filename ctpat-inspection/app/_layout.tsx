@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session } from '@supabase/supabase-js';
@@ -85,20 +86,29 @@ export default function RootLayout() {
 
   const isSignedIn = session !== null;
 
-  // Stack.Protected removes the screens that do not apply: signed out, only "login" exists;
-  // signed in, "login" is gone. When the session changes the router moves to the first
+  // Stack.Protected removes the screens that do not apply: signed out, only the sign-in, sign-up
+  // and password-reset screens exist; signed in, they are gone. When the session changes the router moves to the first
   // screen that is still available, so no screen navigates to another by hand.
   return (
-    <Stack>
-      <Stack.Protected guard={isSignedIn}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="inspection" />
-        <Stack.Screen name="history" />
-        <Stack.Screen name="settings" />
-      </Stack.Protected>
-      <Stack.Protected guard={!isSignedIn}>
-        <Stack.Screen name="login" options={{ headerShown: false }} />
-      </Stack.Protected>
-    </Stack>
+    <>
+      {/* Dark icons by default; screens with the blue header switch to white while they are open. */}
+      <StatusBar style="dark" />
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Protected guard={isSignedIn}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="inspection" />
+          <Stack.Screen name="history" />
+          <Stack.Screen name="settings" />
+        </Stack.Protected>
+        <Stack.Protected guard={!isSignedIn}>
+          <Stack.Screen name="login" />
+          <Stack.Screen name="signup" />
+          <Stack.Screen name="verify-email" />
+          <Stack.Screen name="forgot-password" />
+          <Stack.Screen name="reset-password" />
+          <Stack.Screen name="auth-callback" />
+        </Stack.Protected>
+      </Stack>
+    </>
   );
 }

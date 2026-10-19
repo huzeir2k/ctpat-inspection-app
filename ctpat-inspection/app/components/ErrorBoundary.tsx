@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import Text from './AppText';
 import ErrorHandlerService from '../services/ErrorHandlerService';
 
 interface Props {
@@ -57,8 +58,8 @@ export default class ErrorBoundary extends React.Component<Props, State> {
             </View>
           )}
 
-          <TouchableOpacity style={styles.button} onPress={this.resetError}>
-            <Text style={styles.buttonText}>Try Again</Text>
+          <TouchableOpacity accessibilityRole="button" style={styles.button} onPress={this.resetError}>
+            <Text chrome style={styles.buttonText}>Try Again</Text>
           </TouchableOpacity>
         </ScrollView>
       );

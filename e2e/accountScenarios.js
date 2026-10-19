@@ -99,9 +99,19 @@ const signUpScenario = async (browser, fake) => {
 
   await field(page, 'Code').fill(fake.latestCode('signup', NEW_USER.email));
   await button(page, 'Confirm email').click();
-  await home(page).waitFor();
+
+  // Confirmed, but not signed in: the user goes to the sign-in screen, email already filled in.
+  await heading(page, 'CTPAT Inspection').waitFor();
+  await expectBanner(page, /Email confirmed/);
+  assert.equal(await field(page, 'Email').inputValue(), NEW_USER.email, 'the email is filled in on the sign-in screen');
+  assert.equal(await home(page).count(), 0, 'confirming does not sign the user in');
+  assert.equal(await page.evaluate((key) => localStorage.getItem(key), SESSION_KEY), null, 'no session is kept after confirming');
   assert.equal(fake.users.get(NEW_USER.email).confirmed, true);
-  console.log('ok  sign-up: checklist, validation, code by email, wrong code refused, right code signs in');
+
+  await field(page, 'Password').fill(NEW_USER.password);
+  await button(page, 'Sign In').click();
+  await home(page).waitFor();
+  console.log('ok  sign-up: checklist, validation, code by email, wrong code refused, confirm, then sign in with the chosen password');
   await context.close();
 };
 
@@ -186,10 +196,54 @@ const passwordResetScenario = async (browser, fake) => {
   await again.context.close();
 };
 
+
+/** Opens Google's sign-in window from the button and returns it, as the browser would. */
+const startGoogle = async (page) => {
+  const popup = page.waitForEvent('popup');
+  await button(page, 'Continue with Google').click();
+  return popup;
+};
+
+const googleScenario = async (browser, fake) => {
+  // Sign-up screen and sign-in screen both offer it; a new Google user gets an account and lands on home.
+  const first = await newPage(browser);
+  await button(first.page, 'Create account').click();
+  await heading(first.page, 'Create account').waitFor();
+  assert.equal(await button(first.page, 'Continue with Google').count(), 1, 'the sign-up screen offers Google');
+  await button(first.page, 'I already have an account').click();
+  await heading(first.page, 'CTPAT Inspection').waitFor();
+
+  await startGoogle(first.page);
+  await home(first.page).waitFor();
+  assert.ok(fake.log.includes('authorize:google'), 'the app asked Supabase to start the Google sign-in');
+  assert.equal(fake.users.get('google.user@example.com').confirmed, true, 'the Google account exists and needs no email code');
+  await first.context.close();
+
+  // Closing Google's window is not an error.
+  const second = await newPage(browser);
+  const popup = await startGoogle(second.page);
+  await popup.close();
+  await second.page.waitForTimeout(1200);
+  assert.equal(await visible(second.page.getByRole('alert')).count(), 0, 'closing the Google window shows no error');
+  assert.equal(await home(second.page).count(), 0, 'and does not sign the user in');
+  await second.context.close();
+
+  // Google refusing (or Supabase failing) is explained, and nothing is signed in.
+  fake.options.googleDenies = true;
+  const third = await newPage(browser);
+  await startGoogle(third.page);
+  await expectBanner(third.page, /Google sign-in did not complete/);
+  assert.equal(await home(third.page).count(), 0);
+  fake.options.googleDenies = false;
+  await third.context.close();
+  console.log('ok  google: button on both screens, new account signs in, cancel is quiet, refusal is explained');
+};
+
 const accountScenarios = async (browser, fake) => {
   await signUpScenario(browser, fake);
   await existingAddressScenario(browser, fake);
   await passwordResetScenario(browser, fake);
+  await googleScenario(browser, fake);
 };
 
 module.exports = { accountScenarios };
